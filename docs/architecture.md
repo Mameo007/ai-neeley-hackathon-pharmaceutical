@@ -50,7 +50,7 @@ These were the load-bearing decisions that shape every stage below:
 | **Confidence is earned, not self-reported** | A hunter proposing a finding does not get to assign its own confidence. A separate Fact Checker re-opens the citation and independently verifies it; confidence is a function of that re-check, not of the hunter's self-assessment. |
 | **Graceful degradation** | If a required source category is unavailable for a given company (transcripts being the known risk), the dependent agent is marked "skipped: source unavailable" and the pipeline continues; it does not block or fabricate. |
 | **Run expensive agents less** | Agents that are costly to run many times (Peer Agent) are deliberately sequenced *after* deduplication and first-pass ranking, operating only on the surviving top ~10 candidates, not the full lead pool. |
-| **Human-in-the-loop at the irreversible step** | The AI pre-selects and pre-ranks, but a human approves the final 5 findings and the product choice before downstream stages (comparison, synthesis, CEO move, report) consume them. |
+| **Human-in-the-loop at the irreversible step** | The AI ranks and recommends — it does not pre-select. A human chooses the final 5 findings from the ranked top ~10 (and names the Sharpest Needle) and the product choice before downstream stages (comparison, synthesis, CEO move, report) consume them. |
 
 ---
 
@@ -68,7 +68,7 @@ These were the load-bearing decisions that shape every stage below:
 | 5 | Priced-in / obscurity check | **Priced-In Detector** | runs per candidate |
 | 6 | Scoring & ranking | **Selection/scoring logic** (code, not an agent persona) | 1 |
 | 7 | Peer re-rank | **Peer Agent** | runs once, only on top ~10 |
-| 8 | Human approval | Human-in-loop UI | 1 |
+| 8 | Human selection | Human-in-loop UI (AI recommends, human picks) | 1 |
 | 9 | Product selection | Hybrid dropdown (AI pre-select + user confirm) | 1 |
 | 10 | Label/rival-specific hunting | **Label Lawyer** (+ rival fetch) | runs after product is fixed |
 | 11 | Comparison build | **Comparison Builder** | 1 |
@@ -112,7 +112,8 @@ flowchart TD
 
     G --> SEL["Selection / scoring<br/>(see decision-flow diagram)"]
     SEL --> PEER["Peer Agent<br/>runs once, top ~10 only<br/>demotes industry-wide findings"]
-    PEER --> HUMAN["Human-in-loop<br/>reviews ranked ~10, approves final 5<br/>+ names Sharpest Needle"]
+    PEER --> AIREC["AI recommendation (advisory)<br/>suggested 5 + suggested Sharpest Needle,<br/>not a selection"]
+    AIREC --> HUMAN["Human-in-loop<br/>reviews ranked ~10 + AI recommendation,<br/>SELECTS final 5, NAMES Sharpest Needle"]
 
     HUMAN --> PROD["Product selection<br/>hybrid dropdown:<br/>AI pre-selects from strongest findings,<br/>user confirms/overrides"]
     PROD --> LL2["Label Lawyer (product-specific pass)<br/>+ rival filings/labels fetch"]
@@ -327,7 +328,10 @@ and proposes candidate findings with a citation (chunk ID) for every claim.
 
 Selection is implemented as **code applying a judge's rubric**, not a model
 free-associating a ranking. The same scoring mechanism that ranks findings
-is what produces the Sharpest Needle — it isn't a separate judgment call.
+also produces the *recommended* Sharpest Needle — but the rubric's output is
+advisory. The final 5 and the final Sharpest Needle are a human decision,
+not an automatic one; the rubric's job is to make that decision fast and
+well-informed, not to make it instead of the human.
 
 ### 5.1 Rubric
 
@@ -344,11 +348,17 @@ is what produces the Sharpest Needle — it isn't a separate judgment call.
 4. **Peer re-rank:** Peer Agent runs on the top ~10 and demotes any finding
    shown to be industry-wide across shortlist peers rather than distinctive
    to this company.
-5. **Sharpest Needle** = the highest Materiality × Obscurity score among
-   remaining High/Medium-confidence findings, *after* peer demotion.
-6. **Human-in-loop:** UI shows the ranked top ~10 with score breakdown and
-   confidence badges; AI pre-selects 5; the human can swap any of them.
-   Each row displays *why* it was picked (the score components).
+5. **AI recommendation (advisory only):** the highest Materiality ×
+   Obscurity score among remaining High/Medium-confidence findings, after
+   peer demotion, is surfaced as the *suggested* Sharpest Needle — a
+   recommendation, not an automatic pick.
+6. **Human-in-loop:** UI shows the ranked top ~10 with score breakdown,
+   confidence badges, and the AI's recommended 5 + recommended Sharpest
+   Needle highlighted. The human **selects** the final 5 from the top ~10
+   (not limited to the AI's picks) and **names** the Sharpest Needle —
+   accepting the recommendation or choosing differently. Each row displays
+   *why* the AI recommended it (the score components), to inform the
+   human's choice without making it for them.
 
 ### 5.2 Rejected/retired scoring ideas (recorded for traceability)
 
@@ -377,14 +387,15 @@ flowchart TD
     TOP10 --> PEER["Peer Agent re-rank<br/>(runs once, only here)<br/>industry-wide finding -> demoted"]
     PEER --> RANKED["Final ranked list<br/>with score breakdown + confidence badges"]
 
-    RANKED --> NEEDLE["Sharpest Needle =<br/>highest Materiality x Obscurity<br/>among remaining High/Medium findings"]
-    RANKED --> HUMAN{"Human-in-loop:<br/>AI pre-selects 5,<br/>user reviews ranked ~10"}
+    RANKED --> NEEDLE["AI recommendation (advisory):<br/>suggested Sharpest Needle =<br/>highest Materiality x Obscurity<br/>among remaining High/Medium findings"]
+    RANKED --> HUMAN{"Human-in-loop:<br/>reviews ranked ~10 + AI's<br/>recommended 5 / Sharpest Needle"}
+    NEEDLE --> HUMAN
 
-    HUMAN -- "approves as-is" --> FIVE[Final 5 findings]
-    HUMAN -- "swaps a row" --> FIVE
-    NEEDLE --> FIVE
+    HUMAN -- "selects final 5<br/>(own picks or AI's)" --> FIVE[Final 5 findings]
+    HUMAN -- "names Sharpest Needle<br/>(accepts or overrides AI)" --> NAMED[Named Sharpest Needle]
 
     FIVE --> NEXT["Feeds: product selection,<br/>Comparison Builder tie-in,<br/>Synthesizer, CEO Move agent"]
+    NAMED --> NEXT
 ```
 
 ---
