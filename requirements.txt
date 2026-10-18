@@ -1,1 +1,2 @@
 anthropic>=1.0
+reportlab>=4.0
