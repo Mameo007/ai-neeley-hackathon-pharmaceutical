@@ -224,6 +224,134 @@ class SixKSelectionTests(unittest.TestCase):
         self.assertFalse(L._is_half_year("Results for the three months ended 30 June"))
 
 
+def companyfacts(concepts):
+    """A companyfacts payload: {taxonomy: {tag: {units: {unit: [rows]}}}}."""
+    return {"facts": dict(concepts, dei={"EntityCommonStockSharesOutstanding": {}})}
+
+
+def duration(start, end, val, filed="2026-08-05", form="10-Q"):
+    return {"start": start, "end": end, "val": val, "filed": filed, "form": form}
+
+
+def instant(end, val, filed="2026-08-05", form="10-Q"):
+    return {"end": end, "val": val, "filed": filed, "form": form}
+
+
+class XbrlFactTests(unittest.TestCase):
+    """Contract 1c facts from XBRL companyfacts."""
+
+    def facts_for(self, ticker, concepts):
+        cik = L.CIKS[ticker][0]
+        url = f"https://data.sec.gov/api/xbrl/companyfacts/CIK{cik:010d}.json"
+        fake = FakeSec({url: json.dumps(companyfacts(concepts))})
+        with mock.patch.object(L, "_sec_get", fake):
+            return L._xbrl_facts(ticker)
+
+    def test_value_is_normalised_to_millions(self):
+        # 22,974,000,000 must emit as 22974 - the figure the filing table prints,
+        # which is the whole point of the number-tie.
+        facts, _, _ = self.facts_for("LLY", {"us-gaap": {"Revenues": {"units": {"USD": [
+            duration("2026-04-01", "2026-06-30", 22_974_000_000)]}}}})
+        [fact] = facts
+        self.assertEqual(fact["value"], 22974)
+        self.assertEqual(fact["unit"], "millions")
+        self.assertEqual(fact["currency"], "USD")
+        self.assertEqual(fact["source_kind"], "xbrl")
+        self.assertEqual(fact["doc_id"], "LLY-XBRL")
+        self.assertEqual(fact["fact_id"], "LLY-xbrl-revenue-2026Q2")
+
+    def test_three_and_six_month_rows_become_separate_periods(self):
+        facts, _, _ = self.facts_for("LLY", {"us-gaap": {"Revenues": {"units": {"USD": [
+            duration("2026-04-01", "2026-06-30", 22_974_000_000),
+            duration("2026-01-01", "2026-06-30", 42_773_000_000)]}}}})
+        got = {f["fiscal_period"]: f["value"] for f in facts}
+        self.assertEqual(got, {"Q2 2026": 22974, "H1 2026": 42773})
+
+    def test_filing_fy_fp_fields_are_ignored(self):
+        # The six-month row carries fp "Q2"; trusting it would file the H1 figure
+        # under Q2 and tie two different numbers together.
+        row = duration("2026-01-01", "2026-06-30", 42_773_000_000)
+        row.update(fy=2026, fp="Q2")
+        facts, _, _ = self.facts_for("LLY", {"us-gaap": {"Revenues": {"units": {"USD": [row]}}}})
+        self.assertEqual(facts[0]["fiscal_period"], "H1 2026")
+
+    def test_instant_becomes_quarter_or_fiscal_year(self):
+        facts, _, _ = self.facts_for("LLY", {"us-gaap": {"AccountsReceivableNetCurrent":
+            {"units": {"USD": [instant("2026-06-30", 20_083_000_000),
+                               instant("2025-12-31", 14_000_000_000, form="10-K")]}}}})
+        self.assertEqual({f["fiscal_period"] for f in facts}, {"Q2 2026", "FY2025"})
+
+    def test_fifty_two_week_year_end_in_december_is_a_fiscal_year(self):
+        # J&J's fiscal year ends 2025-12-28.
+        self.assertEqual(L._period_from_fact(instant("2025-12-28", 1)), "FY2025")
+
+    def test_fifty_two_week_year_end_spilling_into_january(self):
+        self.assertEqual(L._period_from_fact(instant("2027-01-02", 1)), "FY2026")
+
+    def test_unlabelable_span_is_skipped_and_counted(self):
+        facts, _, skipped = self.facts_for("LLY", {"us-gaap": {"Revenues": {"units": {"USD": [
+            duration("2026-01-01", "2026-02-15", 1_000_000),       # 45 days
+            duration("2025-10-01", "2026-06-30", 9_000_000)]}}}})  # 272 days
+        self.assertEqual(facts, [])
+        self.assertEqual(skipped, 2)
+
+    def test_non_currency_units_are_skipped(self):
+        facts, _, skipped = self.facts_for("LLY", {"us-gaap": {"Revenues": {"units": {
+            "USD/shares": [duration("2026-04-01", "2026-06-30", 5)],
+            "shares": [instant("2026-06-30", 900_000_000)]}}}})
+        self.assertEqual(facts, [])
+        self.assertEqual(skipped, 2)
+
+    def test_restatement_keeps_the_latest_filed_row(self):
+        facts, _, _ = self.facts_for("LLY", {"us-gaap": {"AccountsReceivableNetCurrent":
+            {"units": {"USD": [instant("2026-06-30", 20_000_000_000, filed="2026-08-05"),
+                               instant("2026-06-30", 20_500_000_000, filed="2026-11-04")]}}}})
+        [fact] = facts
+        self.assertEqual(fact["value"], 20500)
+
+    def test_unmapped_metric_is_reported_not_guessed(self):
+        # Lilly tags no operating income at all.
+        facts, misses, _ = self.facts_for("LLY", {"us-gaap": {"Revenues": {"units": {"USD": [
+            duration("2026-04-01", "2026-06-30", 22_974_000_000)]}}}})
+        missed = {m["metric"] for m in misses}
+        self.assertIn("operating_profit", missed)
+        self.assertNotIn("operating_profit", {f["metric"] for f in facts})
+        self.assertTrue(all(m["candidates_tried"] for m in misses))
+
+    def test_ifrs_tags_and_foreign_currency_resolve(self):
+        facts, _, _ = self.facts_for("NVO", {"ifrs-full": {
+            "CurrentTradeReceivables": {"units": {"DKK": [
+                instant("2024-12-31", 71_949_000_000, form="20-F")]}},
+            "ProfitLossFromOperatingActivities": {"units": {"DKK": [
+                duration("2024-01-01", "2024-12-31", 128_000_000_000, form="20-F")]}}}})
+        got = {f["metric"]: (f["value"], f["currency"], f["fiscal_period"]) for f in facts}
+        self.assertEqual(got["trade_receivables"], (71949, "DKK", "FY2024"))
+        self.assertEqual(got["operating_profit"][2], "FY2024")
+
+    def test_preferred_tag_wins_when_a_filer_reports_several(self):
+        facts, _, _ = self.facts_for("LLY", {"us-gaap": {
+            "Revenues": {"units": {"USD": [duration("2026-04-01", "2026-06-30", 1_000_000)]}},
+            "RevenueFromContractWithCustomerExcludingAssessedTax":
+                {"units": {"USD": [duration("2026-04-01", "2026-06-30", 2_000_000)]}}}})
+        revenue = [f for f in facts if f["metric"] == "revenue"]
+        self.assertEqual([f["value"] for f in revenue], [1])  # Revenues is first in the map
+
+    def test_one_currency_per_metric_keeps_fact_ids_unique(self):
+        facts, _, skipped = self.facts_for("AZN", {"ifrs-full": {"Revenue": {"units": {
+            "USD": [duration("2026-01-01", "2026-06-30", 1_000_000, form="6-K"),
+                    duration("2025-01-01", "2025-06-30", 2_000_000, form="6-K")],
+            "GBP": [duration("2026-01-01", "2026-06-30", 3_000_000, form="6-K")]}}}})
+        ids = [f["fact_id"] for f in facts]
+        self.assertEqual(len(ids), len(set(ids)))
+        self.assertEqual({f["currency"] for f in facts}, {"USD"})
+        self.assertEqual(skipped, 1)
+
+    def test_concept_map_covers_the_keys_partner_b_already_uses(self):
+        for metric in ("revenue", "trade_receivables", "inventory",
+                       "operating_profit", "net_profit"):
+            self.assertIn(metric, L.CONCEPT_MAP)
+
+
 class CorpusTests(unittest.TestCase):
     """End-to-end `build_corpus` runs against a fake EDGAR."""
 
@@ -252,6 +380,16 @@ class CorpusTests(unittest.TestCase):
         for row in rows:
             pages[L._archive_url(cik, row["accessionNumber"], row["primaryDocument"])] = \
                 fixture("lly_10q_pages.htm")
+        pages[f"https://data.sec.gov/api/xbrl/companyfacts/CIK{cik:010d}.json"] = \
+            json.dumps(companyfacts({"us-gaap": {
+                "Revenues": {"units": {"USD": [
+                    duration("2026-04-01", "2026-06-30", 22_974_000_000),
+                    duration("2026-01-01", "2026-06-30", 42_773_000_000)]}},
+                "AccountsReceivableNetCurrent": {"units": {"USD": [
+                    instant("2026-06-30", 20_083_000_000)]}},
+                "InventoryNet": {"units": {"USD": [instant("2026-06-30", 9_000_000_000)]}},
+                "NetIncomeLoss": {"units": {"USD": [
+                    duration("2026-04-01", "2026-06-30", 6_000_000_000)]}}}}))
         return FakeSec(pages), rows
 
     def test_domestic_corpus_has_two_annuals_and_both_quarters(self):
@@ -261,8 +399,8 @@ class CorpusTests(unittest.TestCase):
         manifest = self.read("manifest.json")
         self.assertEqual([e["doc_id"] for e in manifest],
                          ["LLY-10K-FY2025", "LLY-10K-FY2024",
-                          "LLY-10Q-2026Q2", "LLY-10Q-2025Q2"])
-        for entry in manifest:
+                          "LLY-10Q-2026Q2", "LLY-10Q-2025Q2", "LLY-XBRL"])
+        for entry in [e for e in manifest if e["doc_type"] != "xbrl"]:
             self.assertEqual(entry["ticker"], "LLY")
             self.assertEqual(entry["company"], "Eli Lilly")
             self.assertEqual(entry["source"], "live")
@@ -272,12 +410,39 @@ class CorpusTests(unittest.TestCase):
             self.assertTrue(entry["url"].startswith("https://www.sec.gov/Archives/"))
             self.assertTrue(entry["accession"])
 
-    def test_facts_file_exists_but_is_empty_and_the_gap_is_logged(self):
+    def test_facts_are_written_and_tie_to_the_filing_table_figure(self):
         fake, _ = self.domestic_sec()
         with mock.patch.object(L, "_sec_get", fake):
             report = L.build_corpus("LLY", self.run_dir)
-        self.assertTrue((self.run_dir / "facts.jsonl").exists())
+        facts = self.read("facts.jsonl")
+        self.assertTrue(facts)
+        revenue = {f["fiscal_period"]: f["value"] for f in facts if f["metric"] == "revenue"}
+        self.assertEqual(revenue, {"Q2 2026": 22974, "H1 2026": 42773})
+        self.assertTrue(all(f["source_kind"] == "xbrl" and f["unit"] == "millions"
+                            for f in facts))
+        self.assertEqual(len({f["fact_id"] for f in facts}), len(facts))
+        self.assertEqual(report["facts"]["total"], len(facts))
+
+    def test_unmapped_metrics_are_warned_and_counted(self):
+        fake, _ = self.domestic_sec()
+        with mock.patch.object(L, "_sec_get", fake):
+            report = L.build_corpus("LLY", self.run_dir)
+        missed = {m["metric"] for m in report["facts"]["unmapped_metrics"]}
+        self.assertIn("operating_profit", missed)
+        self.assertTrue(any("unmapped_metric operating_profit" in w
+                            for w in report["coverage_warnings"]))
+
+    def test_missing_xbrl_leaves_facts_empty_without_failing_the_run(self):
+        cik = L.CIKS["LLY"][0]
+        fake, _ = self.domestic_sec()
+        del fake.pages[f"https://data.sec.gov/api/xbrl/companyfacts/CIK{cik:010d}.json"]
+        with mock.patch.object(L, "_sec_get", fake):
+            report = L.build_corpus("LLY", self.run_dir)
         self.assertEqual((self.run_dir / "facts.jsonl").read_text(), "")
+        self.assertTrue(self.read("chunks.jsonl"))          # filings corpus survives
+        self.assertNotIn("LLY-XBRL", [e["doc_id"] for e in self.read("manifest.json")])
+        self.assertTrue(any("XBRL companyfacts unavailable" in w
+                            for w in report["coverage_warnings"]))
         self.assertTrue(any("facts.jsonl is empty" in w
                             for w in report["coverage_warnings"]))
 
@@ -374,6 +539,15 @@ class CorpusTests(unittest.TestCase):
                     else "nvo_6k_financial.htm")
             pages[L._archive_url(cik, row["accessionNumber"], row["primaryDocument"])] = \
                 fixture(body)
+        # Novo's companyfacts are ifrs-full, DKK, and annual only - there is no
+        # quarterly receivables fact to tie a 6-K figure against.
+        pages[f"https://data.sec.gov/api/xbrl/companyfacts/CIK{cik:010d}.json"] = \
+            json.dumps(companyfacts({"ifrs-full": {
+                "CurrentTradeReceivables": {"units": {"DKK": [
+                    instant("2024-12-31", 71_949_000_000, form="20-F"),
+                    instant("2025-12-31", 70_856_000_000, form="20-F")]}},
+                "Revenue": {"units": {"DKK": [
+                    duration("2025-01-01", "2025-12-31", 290_000_000_000, form="20-F")]}}}}))
         return FakeSec(pages)
 
     def test_foreign_corpus_follows_exhibit_and_picks_financial_6ks(self):
@@ -382,7 +556,7 @@ class CorpusTests(unittest.TestCase):
         with mock.patch.object(L, "_sec_get", fake):
             L.build_corpus("NVO", run_dir)
         manifest = json.loads((run_dir / "manifest.json").read_text())
-        self.assertEqual([e["doc_id"] for e in manifest],
+        self.assertEqual([e["doc_id"] for e in manifest if e["doc_type"] != "xbrl"],
                          ["NVO-20F-FY2025", "NVO-20F-FY2024",
                           "NVO-6K-2026Q2", "NVO-6K-2025Q2"])
         # the annual's url is the incorporated-by-reference exhibit, not the wrapper
@@ -418,7 +592,8 @@ class CorpusTests(unittest.TestCase):
         with mock.patch.object(L, "_sec_get", fake):
             report = L.build_corpus("NVO", run_dir)
         manifest = json.loads((run_dir / "manifest.json").read_text())
-        self.assertEqual([e["doc_type"] for e in manifest], ["20-F", "20-F"])
+        self.assertEqual([e["doc_type"] for e in manifest if e["doc_type"] != "xbrl"],
+                         ["20-F", "20-F"])
         self.assertTrue(any("no financial 6-K passed content scoring" in w
                             for w in report["coverage_warnings"]))
 
@@ -435,6 +610,21 @@ class CorpusTests(unittest.TestCase):
             report = L.build_corpus("NVO", run_dir)
         self.assertTrue(any("both read as the Q2 2026 financial report" in w
                             for w in report["coverage_warnings"]))
+
+    def test_foreign_filer_gets_annual_facts_only_and_is_warned(self):
+        fake = self.foreign_sec()
+        run_dir = Path(self.tmp.name) / "NVO-20261018-1200"
+        with mock.patch.object(L, "_sec_get", fake):
+            report = L.build_corpus("NVO", run_dir)
+        facts = [json.loads(l) for l in
+                 (run_dir / "facts.jsonl").read_text().splitlines() if l]
+        self.assertTrue(facts)
+        self.assertTrue(all(f["fiscal_period"].startswith("FY") for f in facts))
+        self.assertEqual({f["currency"] for f in facts}, {"DKK"})
+        receivables = {f["fiscal_period"]: f["value"] for f in facts
+                       if f["metric"] == "trade_receivables"}
+        self.assertEqual(receivables["FY2024"], 71949)
+        self.assertTrue(any("annual facts only" in w for w in report["coverage_warnings"]))
 
     def test_unknown_ticker_fails_before_fetching(self):
         with mock.patch.object(L, "_sec_get") as fetch:
@@ -468,15 +658,50 @@ class PartnerBCompatibilityTests(unittest.TestCase):
         for row in rows:
             pages[L._archive_url(cik, row["accessionNumber"], row["primaryDocument"])] = \
                 fixture("lly_10q_pages.htm")
+        pages[f"https://data.sec.gov/api/xbrl/companyfacts/CIK{cik:010d}.json"] = \
+            json.dumps(companyfacts({"us-gaap": {
+                "Revenues": {"units": {"USD": [
+                    duration("2026-04-01", "2026-06-30", 22_974_000_000)]}},
+                "AccountsReceivableNetCurrent": {"units": {"USD": [
+                    instant("2026-06-30", 20_083_000_000)]}},
+                "InventoryNet": {"units": {"USD": [instant("2026-06-30", 9_000_000_000)]}},
+                "NetIncomeLoss": {"units": {"USD": [
+                    duration("2026-04-01", "2026-06-30", 6_000_000_000)]}}}}))
         with mock.patch.object(L, "_sec_get", FakeSec(pages)):
             L.build_corpus("LLY", self.run_dir)
         self.manifest = json.loads((self.run_dir / "manifest.json").read_text())
         self.chunks = [json.loads(line) for line
                        in (self.run_dir / "chunks.jsonl").read_text().splitlines() if line]
+        self.facts = [json.loads(line) for line
+                      in (self.run_dir / "facts.jsonl").read_text().splitlines() if line]
 
     def test_contract_file_set_is_complete(self):
         for name in ("manifest.json", "chunks.jsonl", "facts.jsonl"):
             self.assertTrue((self.run_dir / name).exists(), name)
+
+    def test_every_fact_resolves_to_a_manifest_document(self):
+        documents = {e["doc_id"] for e in self.manifest}
+        self.assertTrue(self.facts)
+        for fact in self.facts:
+            self.assertIn(fact["doc_id"], documents)
+            self.assertEqual(fact["source_kind"], "xbrl")
+            self.assertEqual(fact["unit"], "millions")
+            self.assertRegex(fact["currency"], r"^[A-Z]{3}$")
+
+    def test_facts_cover_the_metric_keys_partner_b_reads(self):
+        present = {f["metric"] for f in self.facts}
+        for metric in ("revenue", "trade_receivables", "inventory", "net_profit"):
+            self.assertIn(metric, present)
+
+    def test_a_fact_and_a_chunk_can_be_tied_on_metric_and_period(self):
+        # The number-tie: the Fact Checker pairs a figure quoted from a filing
+        # table with the XBRL fact for the same metric and fiscal period.
+        fact = next(f for f in self.facts
+                    if f["metric"] == "revenue" and f["fiscal_period"] == "Q2 2026")
+        self.assertEqual(fact["value"], 22974)
+        printed = f"{int(fact['value']):,}"
+        self.assertTrue(any(printed in c["text"] for c in self.chunks),
+                        f"{printed} should appear in a filing-table chunk")
 
     def test_every_chunk_resolves_to_a_manifest_document(self):
         documents = {e["doc_id"]: e for e in self.manifest}
