@@ -13,3 +13,9 @@ The pitch deck and How-we-did-it report are built from this file.
 - 2026-10-18 [Claude] decision: two data contracts (corpus, finding) defined in docs/contracts.md; repo files are the shared memory between both partners' Claude sessions.
 - 2026-10-18 [Claude] wrong: contracts.md example labeled DKK 71,949m receivables as FY2025; it is 31 Dec 2024 (FY2024). Caught on self-review before commit.
 - 2026-10-18 [B] decision: no direct commits to main; branch per change named <type>/<area>-<short-description>, merged via PR (rules in CLAUDE.md).
+- 2026-10-18 [B] decision: baseline demo = run the pipeline live on a laptop (screen share); no hosted deployment needed.
+- 2026-10-18 [B] decision: agents are Claude API calls orchestrated by one Python process (asyncio for parallel hunters); Claude API + tool use chosen over Managed Agents and the Claude Agent SDK as least new code for a 2-hour build.
+- 2026-10-18 [B] decision: Claude API usage is on someone else's account; each partner keeps the key in a git-ignored .env, never committed or pasted into chat. Preferred: owner adds both partners to a workspace with a spend limit and each creates their own key.
+- 2026-10-18 [B] decision: prompt caching on every call; shared prefix (rules + tools) byte-identical across hunters; warm the cache with one call before fanning out to 8 hunters.
+- 2026-10-18 [B] decision: every API call logged per request to logs/api_usage.csv (Contract 3) via shared pharmer/llm.py; models: Opus 5.5 for hunters/Synthesizer/CEO Move, Haiku 5.5 for mechanical stages; server-side refusal fallback on Opus calls.
+- 2026-10-18 [Claude] test: pharmer/llm.py offline tests pass (4/4, fake client, no API calls); not yet run against the real API.

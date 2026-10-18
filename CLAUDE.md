@@ -42,6 +42,22 @@ before starting any task:
 - Commit messages: one imperative summary line ("Add Redliner hunter
   prompt"), optional body explaining why.
 
+## Claude API
+
+- The API account belongs to someone else. Put the key in `.env` (copy
+  `.env.example`; `.env` is git-ignored) with `PHARMER_PARTNER=A` or `B`.
+  **Never commit the key or paste it into a chat.**
+- **Every Claude call goes through `pharmer/llm.py`** (`call()` or
+  `run_agent()`), never the SDK directly. It applies prompt caching and the
+  refusal fallback, and logs usage per call to `logs/api_usage.csv`
+  (`docs/contracts.md`, Contract 3).
+- Models: `llm.OPUS` for hunters, Synthesizer, CEO Move; `llm.HAIKU` for
+  mechanical stages (Dedup judge, Fact Checker, Quant).
+- Keep system prompts and tool lists byte-identical across calls (no
+  timestamps or run IDs in them) so the cached prefix is reused.
+- Setup: `python3 -m venv .venv && .venv/bin/pip install -r requirements.txt`.
+  Tests: `.venv/bin/python -m unittest discover tests`.
+
 ## Rules
 
 - `git pull` on `main` before starting new work; commit small changes often.

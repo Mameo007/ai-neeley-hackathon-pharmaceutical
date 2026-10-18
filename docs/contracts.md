@@ -144,3 +144,29 @@ reasonings make it a composite row (§4.2).
   `peer_check_incomplete`, `unmapped_metric`
 - Human output: `run.json` holds `"sharpest_needle": "<finding_id>"` and
   `"product": "<brand>"` once the human decides.
+
+---
+
+## Contract 3 — API usage log (written by `pharmer/llm.py`, both partners)
+
+Every Claude API call goes through `pharmer.llm.call()` or
+`pharmer.llm.run_agent()`, which append one row per request to
+`logs/api_usage.csv` (git-ignored). A tool-loop agent writes one row per turn.
+
+| Column | Example | Notes |
+|---|---|---|
+| `timestamp` | `2026-10-18T02:31:07+00:00` | UTC |
+| `run_id` | `NVO-20261018-0230` | Same as the `runs/` folder name |
+| `partner` | `B` | From `PHARMER_PARTNER` in `.env` |
+| `stage` | `hunters` | An `area` name from the branch rules in `CLAUDE.md` |
+| `agent` | `redliner` | |
+| `turn` | `3` | Turn within the agent's tool loop; `1` for single calls |
+| `model` | `claude-opus-5-5` | |
+| `input_tokens`, `output_tokens` | `41200`, `1850` | |
+| `cache_creation_input_tokens`, `cache_read_input_tokens` | `0`, `38900` | `cache_read` staying 0 on repeated calls = caching broken |
+| `web_search_requests` | `2` | Priced-In Detector |
+| `stop_reason` | `end_turn` | `tool_use`, `end_turn`, `max_tokens`, `refusal`, `pause_turn` |
+| `latency_ms` | `8400` | Wall time of the request |
+| `request_id` | `req_…` | For reporting failures |
+| `est_cost_usd` | `0.18` | From `PRICES` in `pharmer/llm.py` — an estimate, verify before quoting |
+| `error` | `RateLimitError: …` | Set only when the request failed |
