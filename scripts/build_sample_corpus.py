@@ -4,8 +4,15 @@ A dev fixture that stands in for the Librarian until Partner A's version exists:
 half-year 6-Ks and the XBRL companyfacts, splits the 6-Ks into the filing's printed pages and
 into chunks, and writes `data/sample/NVO/{manifest.json,chunks.jsonl,facts.jsonl}`.
 
+It also bundles the latest DailyMed SPL label of Ozempic (Novo) and of its named rival Mounjaro
+(Lilly) for the Comparison Builder, chosen by the architecture §4.0 label rule: every SPL filed
+under the product's application number, kept only when every NDC carries the allowlisted labeler
+code (repackagers share the application number), exactly one survivor or the build stops. Each
+label becomes a `doc_type: "label"` document chunked by top-level label section
+(`section` = the section title, `page` = the section's ordinal).
+
 Usage:
-    .venv/bin/python scripts/build_sample_corpus.py               # fetch from SEC, then build
+    .venv/bin/python scripts/build_sample_corpus.py               # fetch SEC + DailyMed, build
     .venv/bin/python scripts/build_sample_corpus.py --from-cache  # rebuild from _raw/ only
 """
 
@@ -23,6 +30,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import xml.etree.ElementTree as ET
 from html.parser import HTMLParser
 from pathlib import Path
 
@@ -62,12 +70,36 @@ CONCEPTS = {
 }
 FACT_YEARS = range(2023, 2026)
 
+# DailyMed labels. The application number stands in for the Orange Book lookup of the label
+# rule; the labeler code is the hand-verified allowlist entry (architecture §8.2).
+DAILYMED = "https://dailymed.nlm.nih.gov/dailymed/services/v2"
+LABELS = [
+    {"doc_id": "NVO-LABEL-OZEMPIC", "product": "ozempic", "company": "Novo Nordisk",
+     "ticker": "NVO", "application_no": "NDA209637", "labeler_code": "0169"},
+    {"doc_id": "LLY-LABEL-MOUNJARO", "product": "mounjaro", "company": "Eli Lilly",
+     "ticker": "LLY", "application_no": "NDA215866", "labeler_code": "0002"},
+]
+SPL_NS = "{urn:hl7-org:v3}"
+NDC_SYSTEM = "2.16.840.1.113883.6.69"
+# Top-level SPL sections left out: product data elements (codes, not prose), and the patient
+# Medication Guide, Instructions for Use and carton panels, which restate the prescribing
+# information in lay terms and would only crowd it out.
+SKIP_SECTION_CODES = {"48780-1", "42231-1", "59845-8", "51945-4"}
+
 CHUNK_LIMIT = 1500
 HEADER_MAX_ROWS = 3
 HEADING_MAX_LEN = 120
 
+
+
+def _label_files(label: dict) -> tuple[str, str, str]:
+    """Cache file names: the DailyMed search result, each candidate's NDCs, the chosen SPL."""
+    stem = f"label_{label['product']}"
+    return f"{stem}_spls.json", f"{stem}_ndcs.json", f"{stem}.xml"
+
+
 CACHE_FILES = ["submissions.json", "companyfacts.json", "cache_meta.json"] + [
-    k["document"] for k in SIX_KS]
+    k["document"] for k in SIX_KS] + [name for label in LABELS for name in _label_files(label)]
 OUTPUT_FILES = ["manifest.json", "chunks.jsonl", "facts.jsonl"]
 
 PAGE_NO_RE = re.compile(r"\bPage (\d+) of \d+\b")
@@ -82,8 +114,8 @@ FOOTNOTE_RE = re.compile(r"^\d+\)")
 # ---------------------------------------------------------------- fetch
 
 
-def _sec_get(url: str) -> bytes:
-    """GET one SEC URL with curl (the dev machine's python.org build has no CA bundle)."""
+def _curl(url: str) -> bytes:
+    """GET one URL with curl (the dev machine's python.org build has no CA bundle)."""
     time.sleep(SEC_SLEEP_S)
     proc = subprocess.run(
         ["curl", "-sSfL", "--max-time", "60", "-A", SEC_USER_AGENT, url],
@@ -92,6 +124,65 @@ def _sec_get(url: str) -> bytes:
         err = proc.stderr.decode("utf-8", "replace").strip()
         raise RuntimeError(f"curl exit {proc.returncode} for {url}: {err}")
     return proc.stdout
+
+
+def _sec_get(url: str) -> bytes:
+    """GET one SEC URL."""
+    return _curl(url)
+
+
+def _dailymed_get(url: str) -> bytes:
+    """GET one DailyMed web-services URL."""
+    return _curl(url)
+
+
+def _spls_url(application_no: str) -> str:
+    return f"{DAILYMED}/spls.json?application_number={application_no}"
+
+
+def _ndcs_url(setid: str) -> str:
+    return f"{DAILYMED}/spls/{setid}/ndcs.json"
+
+
+def _spl_url(setid: str) -> str:
+    return f"{DAILYMED}/spls/{setid}.xml"
+
+
+def select_spl(search: dict, ndcs: dict[str, list[str]], labeler_code: str) -> dict:
+    """The one SPL of `search` whose NDCs all carry `labeler_code` (architecture §4.0 rule).
+
+    Each search row is already the latest published version of its set id. Zero or several
+    survivors raise: no auto-pick, because a wrong label corrupts every comparison cell.
+    """
+    survivors = [row for row in search["data"]
+                 if ndcs.get(row["setid"])
+                 and all(n.split("-")[0] == labeler_code for n in ndcs[row["setid"]])]
+    if len(survivors) != 1:
+        listed = "; ".join(f"{r['title']} ({r['published_date']}, labeler "
+                           f"{sorted({n.split('-')[0] for n in ndcs.get(r['setid'], [])})})"
+                           for r in search["data"])
+        raise ValueError(f"{len(survivors)} SPLs with labeler {labeler_code} survive the label "
+                         f"rule; pick one by hand. Candidates: {listed}")
+    return survivors[0]
+
+
+def fetch_label(raw_dir: Path, label: dict) -> None:
+    """Cache one product's DailyMed search, every candidate's NDC list and the chosen SPL XML."""
+    spls_name, ndcs_name, xml_name = _label_files(label)
+    raw = _dailymed_get(_spls_url(label["application_no"]))
+    search = json.loads(raw)
+    if search["metadata"].get("next_page_url") not in (None, "null"):
+        raise ValueError(f"DailyMed search for {label['application_no']} has more than one page")
+    ndcs = {}
+    for row in search["data"]:
+        page = json.loads(_dailymed_get(_ndcs_url(row["setid"])))
+        ndcs[row["setid"]] = [n["ndc"] for n in page["data"]["ndcs"]]
+    chosen = select_spl(search, ndcs, label["labeler_code"])
+    logger.info("fetching %s label %s", label["product"], chosen["setid"])
+    xml = _dailymed_get(_spl_url(chosen["setid"]))
+    (raw_dir / spls_name).write_bytes(raw)
+    _write_json(raw_dir / ndcs_name, ndcs)
+    (raw_dir / xml_name).write_bytes(xml)
 
 
 def _doc_url(accession: str, document: str) -> str:
@@ -107,6 +198,8 @@ def fetch_raw(raw_dir: Path) -> None:
     for k in SIX_KS:
         logger.info("fetching %s", k["document"])
         (raw_dir / k["document"]).write_bytes(_sec_get(_doc_url(k["accession"], k["document"])))
+    for label in LABELS:
+        fetch_label(raw_dir, label)
     meta = {"collected_date": dt.datetime.now(dt.timezone.utc).date().isoformat()}
     _write_json(raw_dir / "cache_meta.json", meta)
 
@@ -303,7 +396,8 @@ def build_chunks(doc_id: str, pages: list[dict]) -> list[dict]:
     chunks: list[dict] = []
     section = ""
     for page in pages:
-        section = _page_section(page, section)
+        # Label pages carry their SPL section title; 6-K pages infer it from the page text.
+        section = page.get("section") or _page_section(page, section)
         texts: list[tuple[str, bool]] = []
         paras: list[str] = []
         for block in page["blocks"]:
@@ -324,6 +418,132 @@ def build_chunks(doc_id: str, pages: list[dict]) -> list[dict]:
                 "text": text,
             })
     return chunks
+
+
+# ---------------------------------------------------------------- SPL labels
+
+
+def _tag(el) -> str:
+    return el.tag.removeprefix(SPL_NS) if isinstance(el.tag, str) else ""
+
+
+def _el_text(el) -> str:
+    return _clean("".join(el.itertext()))
+
+
+def _table_rows(table) -> list[list[str]]:
+    rows = []
+    for tr in table.iter(f"{SPL_NS}tr"):
+        cells = [_el_text(c) for c in tr if _tag(c) in ("td", "th")]
+        cells = [c for c in cells if c]
+        if cells:
+            rows.append(cells)
+    return rows
+
+
+def _text_blocks(text_el) -> list[tuple]:
+    """Blocks of one SPL <text>: paragraphs, list items (one block each) and tables."""
+    blocks: list[tuple] = []
+    inline = [text_el.text or ""]
+
+    def flush():
+        para = _clean("".join(inline))
+        inline.clear()
+        if para:
+            blocks.append(("p", para))
+
+    for child in text_el:
+        tag = _tag(child)
+        if tag in ("paragraph", "list", "table", "renderMultiMedia"):
+            flush()
+            if tag == "paragraph" and _el_text(child):
+                blocks.append(("p", _el_text(child)))
+            elif tag == "list":
+                blocks += [("p", _el_text(i)) for i in child if _tag(i) == "item"
+                           and _el_text(i)]
+            elif tag == "table":
+                caption = child.find(f"{SPL_NS}caption")
+                if caption is not None and _el_text(caption):
+                    blocks.append(("p", _el_text(caption)))
+                if _table_rows(child):
+                    blocks.append(("table", _table_rows(child)))
+        else:
+            inline.append("".join(child.itertext()))
+        inline.append(child.tail or "")
+    flush()
+    return blocks
+
+
+def _section_blocks(section) -> list[tuple]:
+    """Blocks of a section and its subsections, in document order (highlights excerpts skipped:
+    they repeat the full text)."""
+    blocks: list[tuple] = []
+    for child in section:
+        tag = _tag(child)
+        if tag == "title" and _el_text(child):
+            blocks.append(("p", _el_text(child)))
+        elif tag == "text":
+            blocks += _text_blocks(child)
+        elif tag == "component":
+            sub = child.find(f"{SPL_NS}section")
+            if sub is not None:
+                blocks += _section_blocks(sub)
+    return blocks
+
+
+def parse_label(raw_xml: bytes, label: dict, chosen: dict) -> tuple[list[dict], str]:
+    """SPL XML -> ([{"page", "section", "blocks"}], effective date ISO), one page per kept
+    top-level section. Checks the XML is the chosen SPL, filed under the label's application
+    and with every NDC from the allowlisted labeler."""
+    root = ET.fromstring(raw_xml)
+    setid = root.find(f"{SPL_NS}setId").get("root")
+    version = int(root.find(f"{SPL_NS}versionNumber").get("value"))
+    if (setid, version) != (chosen["setid"], chosen["spl_version"]):
+        raise ValueError(f"{label['product']} SPL is {setid} v{version}, search says "
+                         f"{chosen['setid']} v{chosen['spl_version']}")
+    apps = {el.get("extension") for el in root.iter(f"{SPL_NS}id") if el.get("extension")}
+    if label["application_no"] not in apps:
+        raise ValueError(f"{label['product']} SPL does not cite {label['application_no']}")
+    ndcs = {el.get("code") for el in root.iter(f"{SPL_NS}code")
+            if el.get("codeSystem") == NDC_SYSTEM}
+    if not ndcs or any(n.split("-")[0] != label["labeler_code"] for n in ndcs):
+        raise ValueError(f"{label['product']} SPL has NDCs outside labeler "
+                         f"{label['labeler_code']}: {sorted(ndcs)}")
+    effective = root.find(f"{SPL_NS}effectiveTime").get("value")
+    body = root.find(f"{SPL_NS}component/{SPL_NS}structuredBody")
+    pages: list[dict] = []
+    for comp in body.findall(f"{SPL_NS}component"):
+        section = comp.find(f"{SPL_NS}section")
+        code = section.find(f"{SPL_NS}code")
+        if code.get("code") in SKIP_SECTION_CODES:
+            continue
+        title_el = section.find(f"{SPL_NS}title")
+        title = _el_text(title_el) if title_el is not None else ""
+        if not title:
+            title = code.get("displayName", "").upper().removesuffix(" SECTION").capitalize()
+        blocks = _section_blocks(section)
+        if blocks:
+            pages.append({"page": len(pages) + 1, "section": title, "blocks": blocks})
+    return pages, f"{effective[:4]}-{effective[4:6]}-{effective[6:8]}"
+
+
+def build_label(raw_dir: Path, label: dict, collected_date: str) -> tuple[dict, list[dict]]:
+    """One label's Contract 1a manifest row and 1b chunks, from the raw cache only."""
+    spls_name, ndcs_name, xml_name = _label_files(label)
+    search = json.loads((raw_dir / spls_name).read_text(encoding="utf-8"))
+    ndcs = json.loads((raw_dir / ndcs_name).read_text(encoding="utf-8"))
+    chosen = select_spl(search, ndcs, label["labeler_code"])
+    pages, effective = parse_label((raw_dir / xml_name).read_bytes(), label, chosen)
+    published = dt.datetime.strptime(chosen["published_date"], "%b %d, %Y").date().isoformat()
+    row = {
+        "doc_id": label["doc_id"], "company": label["company"], "ticker": label["ticker"],
+        # A label covers no reporting period; "" as the Librarian writes for period-less docs.
+        "doc_type": "label", "fiscal_period": "", "period_end": effective,
+        "filed_date": published, "url": _spl_url(chosen["setid"]), "accession": None,
+        "source": "pre-collected", "collected_date": collected_date,
+        "application_no": label["application_no"], "labeler_code": label["labeler_code"],
+    }
+    return row, build_chunks(label["doc_id"], pages)
 
 
 # ---------------------------------------------------------------- manifest + facts
@@ -423,6 +643,10 @@ def build_outputs(raw_dir: Path, out_dir: Path) -> None:
     for k in SIX_KS:
         raw_html = (raw_dir / k["document"]).read_text(encoding="utf-8")
         chunks += build_chunks(k["doc_id"], parse_pages(raw_html))
+    for label in LABELS:
+        row, label_chunks = build_label(raw_dir, label, meta["collected_date"])
+        manifest.append(row)
+        chunks += label_chunks
     doc_order = {m["doc_id"]: i for i, m in enumerate(manifest)}
     chunks.sort(key=lambda c: (doc_order[c["doc_id"]], c["page"],
                                int(c["chunk_id"].rsplit("-c", 1)[1])))
