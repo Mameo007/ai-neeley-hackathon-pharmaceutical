@@ -221,6 +221,11 @@ class FinishTests(OrchestratorTestCase):
         for entry in status["stages"].values():
             self.assertIn("seconds", entry)
 
+    def test_empty_product_clears_it(self):
+        self.finish(self.run_dir, needle="F-003", product="Brand B")
+        self.finish(self.run_dir, needle="F-003", product="")
+        self.assertEqual(self.run_json(), {"sharpest_needle": "F-003"})
+
     def test_rerun_keeps_other_keys(self):
         self.finish(self.run_dir, needle="F-003", product="Brand B")
         self.finish(self.run_dir, needle="F-001")
@@ -265,9 +270,25 @@ class FinishTests(OrchestratorTestCase):
     def test_refused_unless_start_paused(self):
         status = self.status(self.run_dir)
         status["phase"] = "failed"
+        status["stages"]["scoring_after_peer"]["status"] = "failed"
         (self.run_dir / "pipeline.json").write_text(json.dumps(status), encoding="utf-8")
         with self.assertRaises(orchestrator.UsageError):
             self.finish(self.run_dir, needle="F-003")
+
+    def test_refused_while_running(self):
+        status = self.status(self.run_dir)
+        status["phase"] = "running"
+        (self.run_dir / "pipeline.json").write_text(json.dumps(status), encoding="utf-8")
+        with self.assertRaises(orchestrator.UsageError):
+            self.finish(self.run_dir, needle="F-003")
+
+    def test_failed_finish_can_be_retried(self):
+        self.fail["report"] = OSError("disk full")
+        self.finish(self.run_dir, needle="F-003")
+        self.assertEqual(self.status(self.run_dir)["phase"], "failed")
+        del self.fail["report"]
+        self.finish(self.run_dir, needle="F-003")
+        self.assertEqual(self.status(self.run_dir)["phase"], "done")
 
     def test_rerun_clears_the_previous_report(self):
         self.finish(self.run_dir, needle="F-003")
