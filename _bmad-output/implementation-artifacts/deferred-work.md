@@ -7,3 +7,12 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-sample-novo-corpus.md`
   summary: List the new `scripts/` and `data/sample/<TICKER>/` folders (and how stages point at the sample corpus) in the layout section of docs/conventions.md.
   evidence: The sample-corpus change adds both top-level folders, but docs/conventions.md — which both partners' Claude sessions read before every task — does not mention them, so the other session cannot discover the fixture.
+- source_spec: `_bmad-output/implementation-artifacts/spec-hunters-harness-channel-checker.md`
+  summary: Add `runs/<run_id>/leads.json` (hunter output, Dedup input, provisional F-nnn ids that Dedup may renumber) to docs/contracts.md.
+  evidence: The harness writes leads.json but Contract 2 only names findings.json; contract changes need both partners (CLAUDE.md).
+- source_spec: `_bmad-output/implementation-artifacts/spec-hunters-harness-channel-checker.md`
+  summary: Confirm the shared hunter prefix (tools + hunter_rules.md, ~1.5k tokens) actually caches on Opus, and warm it with one call before fanning out.
+  evidence: maybe-false, medium if true — the prefix may be below Opus's minimum cacheable length, making the explicit system breakpoint a no-op; settle by reading cache_creation/cache_read in logs/api_usage.csv on the first real run.
+- source_spec: `_bmad-output/implementation-artifacts/spec-hunters-harness-channel-checker.md`
+  summary: Bound get_facts output (cap or required filter) once Partner A's Librarian adds IR-workbook facts.
+  evidence: get_facts() with no filter returns every fact; harmless at 15 sample facts, context-flooding on a full corpus.
