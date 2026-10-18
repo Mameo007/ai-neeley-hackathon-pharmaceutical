@@ -642,7 +642,9 @@ class OwnershipTests(QuantTestCase):
     def test_only_impact_changes(self):
         before = [lly_finding()]
         after, _report, _run = self.quantify("LLY", copy.deepcopy(before), self.client())
+        self.assertEqual(len(after), len(before))
         for old, new in zip(before, after):
+            self.assertEqual(len(new["reasonings"]), len(old["reasonings"]))
             self.assertEqual({k: v for k, v in old.items() if k != "reasonings"},
                              {k: v for k, v in new.items() if k != "reasonings"})
             for old_r, new_r in zip(old["reasonings"], new["reasonings"]):
@@ -684,9 +686,15 @@ class OwnershipTests(QuantTestCase):
         for reasoning in findings[0]["reasonings"]:
             self.assertIsNotNone(reasoning["impact"])
 
-    def test_a_missing_facts_file_leaves_everything_unquantified(self):
-        findings, report, _run = self.quantify("LLY", [lly_finding()], self.client(),
-                                               facts=[])
+    def test_an_absent_facts_file_leaves_everything_unquantified(self):
+        # `facts=[]` writes an *empty* file and never reaches the path.exists() branch,
+        # so the file is removed outright here.
+        run_dir = self.make_run("LLY", [lly_finding()])
+        (run_dir / "facts.jsonl").unlink()
+        llm._client = self.client()
+        asyncio.run(quant.run(run_dir))
+        findings = json.loads((run_dir / "findings.json").read_text(encoding="utf-8"))
+        report = json.loads((run_dir / "quant_report.json").read_text(encoding="utf-8"))
         self.assertIsNone(findings[0]["reasonings"][0]["impact"])
         self.assertEqual(report["quantified"], 0)
 
@@ -775,6 +783,195 @@ class AuditTrailTests(QuantTestCase):
             f["reasonings"][0]["impact"]["eps_pct"] = eps_pct
         scoring.apply(findings)
         self.assertEqual([f["finding_id"] for f in findings if f["recommended"]], ["F-001"])
+
+
+# --------------------------------------------------------------------------
+# regressions from the independent review (2026-10-18)
+
+
+class CrashContainmentTests(QuantTestCase):
+    """One bad reasoning must not discard every other reasoning's work."""
+
+    def test_a_huge_literal_is_contained_not_raised(self):
+        # float() on an oversized int literal raises OverflowError, which `quantify`
+        # did not catch, so the stage died and neither output file was written.
+        with self.assertRaises(ValueError):
+            quant.evaluate("a * " + "9" * 400, {"a": 1.0})
+        client = FormulaClient(default=reply(formula="receivables * " + "9" * 400,
+                                             inputs=LLY_WRITEDOWN))
+        findings, report, run_dir = self.quantify("LLY", [lly_finding()], client)
+        self.assertIsNone(findings[0]["reasonings"][0]["impact"])
+        self.assertTrue((run_dir / "quant_report.json").exists())
+        self.assertEqual(report["quantified"], 0)
+
+    def test_a_zero_share_count_is_refused_not_divided_by(self):
+        facts = [dict(f) for f in CORPUS["LLY"]["facts"]]
+        for f in facts:
+            if f["metric"] == "diluted_shares" and f["fiscal_period"] == "FY2025":
+                f["value"] = 0
+        eps, shares, detail = quant.eps_denominator(
+            {"fiscal_period": "FY2025", "currency": "USD"}, facts)
+        self.assertIsNone(eps)
+        self.assertIn("cannot be a denominator", detail)
+
+    def test_a_negative_share_count_cannot_invert_the_sign(self):
+        facts = [dict(f) for f in CORPUS["LLY"]["facts"]]
+        for f in facts:
+            if f["metric"] == "diluted_shares" and f["fiscal_period"] == "FY2025":
+                f["value"] = -899.3
+        eps, _s, detail = quant.eps_denominator(
+            {"fiscal_period": "FY2025", "currency": "USD"}, facts)
+        self.assertIsNone(eps)
+        self.assertIn("cannot be a denominator", detail)
+
+    def test_a_zero_share_count_still_writes_both_files(self):
+        facts = [f for f in CORPUS["LLY"]["facts"]]
+        facts = [dict(f, value=0) if (f["metric"] == "diluted_shares"
+                                      and f["fiscal_period"] == "FY2025") else f
+                 for f in facts]
+        client = FormulaClient(default=reply(inputs=LLY_WRITEDOWN))
+        findings, report, run_dir = self.quantify("LLY", [lly_finding()], client,
+                                                  facts=facts)
+        self.assertTrue((run_dir / "findings.json").exists())
+        self.assertIsNone(findings[0]["reasonings"][0]["impact"]["eps_pct"])
+        self.assertEqual(report["with_eps_pct"], 0)
+
+
+class QuoteProvenanceTests(QuantTestCase):
+    """Substring containment is not provenance."""
+
+    def setUp(self):
+        super().setUp()
+        self.facts_by_id, _f, self.chunks = quant.load_corpus(
+            self.make_run("NVO", [nvo_finding()]))
+
+    def resolve(self, item):
+        return quant.resolve_inputs([item], nvo_finding()["anchor"], self.facts_by_id,
+                                    self.chunks)
+
+    def test_a_digit_fragment_of_a_longer_figure_is_refused(self):
+        # "70,85" really is a substring of "Trade receivables 88,949 70,856" and parses
+        # to 7085.0 - a figure the filing never printed.
+        for fragment in ("8,949", "70,85", "949"):
+            item = quote_input("x", "NVO-6K-2026Q2-p28-c02", fragment)
+            problems = self.resolve(item)[2]
+            self.assertTrue(any("part of a longer figure" in p for p in problems),
+                            msg=f"{fragment} was accepted: {problems}")
+
+    def test_a_whole_figure_at_either_end_of_the_chunk_is_accepted(self):
+        values, _p, problems = self.resolve(
+            quote_input("x", "NVO-6K-2026Q2-p28-c02", "Trade receivables 88,949"))
+        self.assertEqual((problems, values["x"]), ([], 88949.0))
+        self.assertTrue(quant._whole_figure_in("88,949", "88,949 at the period end"))
+        self.assertTrue(quant._whole_figure_in("70,856", "receivables 88,949 70,856"))
+
+    def test_a_percent_or_scale_word_makes_the_magnitude_ambiguous(self):
+        # `_parse_number` reads digits only, so "2%" would enter a formula as 2.0.
+        self.assertEqual(quant._parse_number("2%"), 2.0)
+        chunk = {"chunk_id": "C-1", "doc_id": "D", "page": 1, "is_table": False,
+                 "text": "an allowance of 2% and a charge of $1.2 billion"}
+        self.chunks["C-1"] = chunk
+        for quote in ("allowance of 2%", "charge of $1.2 billion"):
+            problems = self.resolve(quote_input("x", "C-1", quote))[2]
+            self.assertTrue(any("ambiguous" in p for p in problems), msg=quote)
+
+    def test_a_null_fact_id_does_not_resolve_to_a_corpus_row(self):
+        self.facts_by_id[None] = {"fact_id": None, "value": 12345.0,
+                                  "fiscal_period": "Q2 2026"}
+        item = fact_input("x", None)
+        problems = self.resolve(item)[2]
+        self.assertTrue(any("needs a fact_id" in p for p in problems))
+
+
+class ZeroImpactTests(QuantTestCase):
+    def test_a_zero_assumption_does_not_become_a_ranked_zero(self):
+        # impact 0.0 made scoring.materiality return 0.0, not None, so a "no loss
+        # expected" finding outranked every unquantified one.
+        client = FormulaClient(default=reply(inputs=[
+            fact_input("receivables", "LLY-xbrl-trade_receivables-FY2025"),
+            assumption("write_down_rate", 0.0, "no loss expected")]))
+        findings, report, _run = self.quantify("LLY", [lly_finding()], client)
+        reasoning = findings[0]["reasonings"][0]
+        self.assertIsNone(reasoning["impact"])
+        self.assertIn("evaluates to zero", report["skipped"][0]["reason"])
+        reasoning["priced_in"] = {"hits": 0, "evidence": [], "stock_move_pct": None}
+        self.assertIsNone(scoring.materiality(reasoning))
+
+
+class RerunTests(QuantTestCase):
+    def test_a_failing_rerun_clears_the_previous_impact(self):
+        # findings.json kept the old figure while the sidecar said "skipped", and
+        # scoring reads findings.json.
+        run_dir = self.make_run("LLY", [lly_finding()])
+        llm._client = FormulaClient(default=reply(inputs=LLY_WRITEDOWN))
+        asyncio.run(quant.run(run_dir))
+        first = json.loads((run_dir / "findings.json").read_text(encoding="utf-8"))
+        self.assertIsNotNone(first[0]["reasonings"][0]["impact"])
+
+        llm._client = FormulaClient(default=reply(quantifiable=False, reason="no mechanism"))
+        asyncio.run(quant.run(run_dir))
+        again = json.loads((run_dir / "findings.json").read_text(encoding="utf-8"))
+        report = json.loads((run_dir / "quant_report.json").read_text(encoding="utf-8"))
+        self.assertIsNone(again[0]["reasonings"][0]["impact"])
+        self.assertEqual(report["quantified"], 0)
+
+
+class FxEdgeTests(QuantTestCase):
+    def test_the_look_back_has_a_ceiling(self):
+        # FX_LOOKBACK_DAYS is 7, so 06-23 is the oldest date a 06-30 period end accepts.
+        edge = {"DKK": {"2026-06-23": 7.47}, "USD": {"2026-06-23": 1.16}}
+        rate, detail = quant.fx_rate(Path(self.tmp.name) / "edge", "DKK", "2026-04-01",
+                                     "2026-06-30", "balance", fetch=lambda c, s, e: edge)
+        self.assertIsNotNone(rate)
+        self.assertEqual(detail["date"], "2026-06-23")
+        # One day older is past the ceiling, and a stale rate is refused.
+        beyond = {"DKK": {"2026-06-22": 7.47}, "USD": {"2026-06-22": 1.16}}
+        rate, detail = quant.fx_rate(Path(self.tmp.name) / "a", "DKK", "2026-04-01",
+                                     "2026-06-30", "balance",
+                                     fetch=lambda c, s, e: beyond)
+        self.assertIsNone(rate)
+        self.assertIn("no ECB reference rate", detail["note"])
+        near = {"DKK": {"2026-06-26": 7.47}, "USD": {"2026-06-26": 1.16}}
+        rate, detail = quant.fx_rate(Path(self.tmp.name) / "b", "DKK", "2026-04-01",
+                                     "2026-06-30", "balance", fetch=lambda c, s, e: near)
+        self.assertIsNotNone(rate)
+        self.assertEqual(detail["date"], "2026-06-26")
+
+    def test_a_euro_filer_converts_through_the_reciprocal(self):
+        # The ECB dataset has no EUR/EUR row, so a cross would always be empty and every
+        # EUR filer lost its dollar figure.
+        fake = {"USD": {"2026-06-30": 1.1605}}
+        rate, detail = quant.fx_rate(Path(self.tmp.name) / "eur", "EUR", "2026-04-01",
+                                     "2026-06-30", "balance", fetch=lambda c, s, e: fake)
+        self.assertAlmostEqual(rate, 1 / 1.1605, places=9)
+        self.assertEqual(detail["pair"], "EUR/USD")
+
+    def test_the_fx_basis_vocabulary_is_the_same_for_usd_and_non_usd(self):
+        usd = quant.fx_rate(Path(self.tmp.name) / "c", "USD", "2026-04-01", "2026-06-30",
+                            "balance", fetch=no_ecb)[1]
+        dkk = quant.fx_rate(Path(self.tmp.name) / "d", "DKK", "2026-04-01", "2026-06-30",
+                            "balance", fetch=fake_ecb)[1]
+        self.assertEqual(usd["basis"], dkk["basis"])
+        self.assertEqual(usd["basis"], "period_end")
+        flow = quant.fx_rate(Path(self.tmp.name) / "e", "USD", "2026-04-01", "2026-06-30",
+                             "flow", fetch=no_ecb)[1]
+        self.assertEqual(flow["basis"], "period_average")
+
+
+class ReproducibilityTests(QuantTestCase):
+    def test_a_converted_impact_reproduces_from_the_contract_fields_alone(self):
+        # The USD path hides this: usd_m == native_m there, so rate 1.0 proves nothing.
+        client = FormulaClient(default=reply(
+            formula="(receivables_now - baseline) * write_down_rate",
+            inputs=NVO_WRITEDOWN))
+        findings, report, _run = self.quantify("NVO", [nvo_finding()], client)
+        impact = findings[0]["reasonings"][0]["impact"]
+        native = quant.evaluate(impact["formula"], impact["inputs"])
+        self.assertAlmostEqual(native, self.rows_by_id(report)["F-001-a"]["native_m"],
+                               places=6)
+        self.assertNotAlmostEqual(native, impact["usd_m"], places=1)   # a real conversion
+        self.assertAlmostEqual(round(native / impact["fx"]["rate"], 1), impact["usd_m"],
+                               places=6)
 
 
 if __name__ == "__main__":

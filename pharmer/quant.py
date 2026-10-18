@@ -105,6 +105,11 @@ OUTPUT_CONFIG = {
 
 _NAME_RE = re.compile(r"^[a-z][a-z0-9_]*$")
 _NUMBER_IN_TEXT_RE = re.compile(r"\(?\$?\s?-?\d[\d,]*(?:\.\d+)?\)?")
+# Scale words and a percent sign change what a figure means, and `_parse_number` reads
+# only the digits: "2%" would enter a formula as 2.0 rather than 0.02, and "$1.2 billion"
+# as 1.2 against millions-scale facts. A quote carrying either is refused as ambiguous.
+_AMBIGUOUS_SCALE_RE = re.compile(
+    r"(?i)%|\bper\s?cent|\bbillion\b|\bmillion\b|\bthousand\b|\btrillion\b|\bbn\b|\bm\b|\bk\b")
 
 
 # --------------------------------------------------------------------------
@@ -147,6 +152,11 @@ def evaluate(formula, values):
         result = walk(tree)
     except ZeroDivisionError as exc:
         raise ValueError("formula divides by zero") from exc
+    except (OverflowError, ValueError) as exc:
+        # A literal too large for a double raises OverflowError inside float(); left
+        # uncaught it escaped `quantify` and killed the whole stage, so one malformed
+        # formula discarded every other finding's work.
+        raise ValueError(f"formula could not be evaluated: {exc}") from exc
     if result != result or result in (float("inf"), float("-inf")):  # NaN / overflow
         raise ValueError("formula did not produce a finite number")
     return result
@@ -172,6 +182,29 @@ def _parse_number(token):
     return -float(body) if negative else float(body)
 
 
+def _whole_figure_in(token, text):
+    """Whether `token` appears in `text` as a complete printed figure.
+
+    Guards the digit-fragment hole in substring matching: a quote of `"70,85"` really is
+    contained in `"Trade receivables 88,949 70,856"`, so containment alone would accept a
+    number the filing never printed. The occurrence must not have a digit, a comma or a
+    decimal point immediately on either side.
+    """
+    needle = token.strip()
+    if not needle:
+        return False
+    digits = "0123456789.,"
+    for match in re.finditer(re.escape(needle), text):
+        before = text[match.start() - 1] if match.start() else ""
+        after = text[match.end()] if match.end() < len(text) else ""
+        # `"" in digits` is True in Python, so the emptiness has to be tested first or a
+        # figure at either end of the chunk would be rejected as a fragment.
+        if (before and before in digits) or (after and after in digits):
+            continue
+        return True
+    return False
+
+
 def load_corpus(run_dir):
     """(facts by id, facts list, chunks by id) from one run folder; missing files are empty."""
     def jsonl(name):
@@ -191,7 +224,8 @@ def load_corpus(run_dir):
     facts = [f for f in jsonl("facts.jsonl") if isinstance(f, dict)]
     chunks = {c["chunk_id"]: c for c in jsonl("chunks.jsonl")
               if isinstance(c, dict) and c.get("chunk_id")}
-    return {f.get("fact_id"): f for f in facts}, facts, chunks
+    by_id = {f["fact_id"]: f for f in facts if f.get("fact_id")}
+    return by_id, facts, chunks
 
 
 def period_bounds(fiscal_period, period_end=None):
@@ -262,9 +296,12 @@ def fx_rate(run_dir, currency, start, end, basis, fetch=None):
     the real fetcher at import and quietly put the network back into the test suite.
     """
     fetch = fetch or _ecb_series
+    convention = "period_average" if basis == "flow" else "period_end"
     if currency == "USD":
-        return 1.0, {"pair": "USD/USD", "rate": 1.0, "date": end, "basis": basis,
-                     "source": "none (already USD)"}
+        # `basis` is reported as the FX convention on every path; passing the raw
+        # flow/balance word through here gave consumers two vocabularies for one key.
+        return 1.0, {"pair": "USD/USD", "rate": 1.0, "date": end, "basis": convention,
+                     "source": "none (already USD)", "direction": "already USD"}
     cache_path = Path(run_dir) / FX_CACHE
     cache = {}
     if cache_path.exists():
@@ -283,7 +320,11 @@ def fx_rate(run_dir, currency, start, end, basis, fetch=None):
     except (urllib.error.URLError, OSError, ValueError) as exc:
         log.warning("quant: ECB rates unavailable (%s)", exc)
 
-    native, usd = series.get(currency) or {}, series.get("USD") or {}
+    usd = series.get("USD") or {}
+    # The EUR is the ECB's base, so the dataset has no EUR/EUR row: a EUR filer needs the
+    # reciprocal of USD-per-EUR, not a cross. Without this every EUR-reporting filer
+    # (Sanofi, Bayer) lost its dollar figure and was reported as a rate outage.
+    native = {day: 1.0 for day in usd} if currency == "EUR" else (series.get(currency) or {})
     rate, detail = None, None
     if native and usd:
         if basis == "flow":
@@ -344,7 +385,13 @@ def resolve_inputs(reply_inputs, anchor, facts_by_id, chunks):
         row = {"name": name, "kind": kind, "period_note": item.get("period_note")}
 
         if kind == "fact":
-            fact = facts_by_id.get(item.get("fact_id"))
+            fact_id = item.get("fact_id")
+            if not fact_id or not isinstance(fact_id, str):
+                # `None` is a live dict key, so a null fact_id used to resolve against any
+                # corpus row that was itself missing one - an invented input.
+                problems.append(f"{name}: a fact input needs a fact_id")
+                continue
+            fact = facts_by_id.get(fact_id)
             if fact is None:
                 problems.append(f"{name}: fact_id {item.get('fact_id')!r} is not in facts.jsonl")
                 continue
@@ -372,14 +419,25 @@ def resolve_inputs(reply_inputs, anchor, facts_by_id, chunks):
             if quote not in text and " ".join(quote.split()) not in " ".join(text.split()):
                 problems.append(f"{name}: the quote is not in {item.get('chunk_id')}")
                 continue
-            numbers = [_parse_number(t) for t in _NUMBER_IN_TEXT_RE.findall(quote)]
-            numbers = [n for n in numbers if n is not None]
-            if len(numbers) != 1:
+            tokens = [t for t in _NUMBER_IN_TEXT_RE.findall(quote)
+                      if _parse_number(t) is not None]
+            if len(tokens) != 1:
                 problems.append(f"{name}: the quote must contain exactly one figure, found "
-                                f"{len(numbers)}")
+                                f"{len(tokens)}")
                 continue
-            values[name] = numbers[0]
-            row.update({"value": numbers[0], "source": item.get("chunk_id"),
+            if _AMBIGUOUS_SCALE_RE.search(quote):
+                problems.append(f"{name}: the quote carries a percent sign or a scale word, "
+                                f"so its magnitude is ambiguous")
+                continue
+            if not _whole_figure_in(tokens[0], text):
+                # "70,85" is a verbatim substring of "70,856" and parses to 7085.0 - a
+                # figure the filing never printed. Substring containment alone is not
+                # provenance; the figure has to be a whole printed number.
+                problems.append(f"{name}: {tokens[0].strip()!r} is part of a longer figure "
+                                f"in {item.get('chunk_id')}, not a figure in its own right")
+                continue
+            values[name] = _parse_number(tokens[0])
+            row.update({"value": values[name], "source": item.get("chunk_id"),
                         "quote": quote, "page": chunk.get("page"),
                         "fiscal_period": item.get("period_note") or anchor_period})
 
@@ -439,6 +497,11 @@ def eps_denominator(anchor, facts):
                             f"impact in {currency or 'an unstated currency'}")
     if not eps.get("value"):
         return None, None, f"diluted EPS for {period} is zero, so a percentage is undefined"
+    if not shares.get("value") or shares["value"] <= 0:
+        # A zero count divided by zero in eps_percent and took the whole stage with it;
+        # a negative one would have silently inverted the sign of every eps_pct.
+        return None, None, (f"the diluted share count for {period} is "
+                            f"{shares.get('value')!r}, which cannot be a denominator")
     return eps, shares, (f"{eps['fact_id']} = {eps['value']} {eps_currency}/share over "
                          f"{shares['fact_id']} = {shares['value']}m shares")
 
@@ -543,6 +606,11 @@ async def quantify(run_id, finding, reasoning, facts_by_id, facts, chunks, run_d
                       "currency": anchor.get("currency")},
            "quantified": False, "impact": None, "skipped": None, "problems": []}
 
+    # Cleared up front, so a re-run that fails cannot leave the previous run's figure in
+    # findings.json while the sidecar reports the reasoning as skipped - scoring reads
+    # findings.json, and the two files disagreeing is worse than no impact at all.
+    reasoning["impact"] = None
+
     if reasoning.get("confidence") not in QUANTIFIABLE_CONFIDENCE:
         row["skipped"] = (f"confidence {reasoning.get('confidence')!r} fails the scoring gate; "
                           f"not quantified and no call made")
@@ -590,6 +658,13 @@ async def quantify(run_id, finding, reasoning, facts_by_id, facts, chunks, run_d
     row["model_formula"] = formula
     row["direction"] = direction
     row["magnitude"] = magnitude
+    if native_m == 0:
+        # A zero assumption ("no loss expected") produced impact 0.0, which scoring reads
+        # as materiality 0.0 - a ranked zero that outranks every unquantified finding.
+        # Contract 2's absent impact is the honest representation of "no size".
+        row["problems"].append("the formula evaluates to zero, which is not a measurement")
+        row["skipped"] = "the formula evaluates to zero"
+        return row
     row["native_m"] = native_m
     row["native_currency"] = anchor.get("currency")
     formula = signed_formula
