@@ -1,0 +1,98 @@
+{
+  "MRK": [
+    {
+      "product": "Keytruda",
+      "rivals": "Bristol Myers Squibb's Opdivo, AstraZeneca's Imfinzi, and Roche's Tecentriq (rival immunotherapies)."
+    },
+    {
+      "product": "Januvia",
+      "rivals": "Generic sitagliptin, plus Novo Nordisk's Ozempic and Boehringer Ingelheim/Lilly's Jardiance (newer diabetes drugs that took share)."
+    }
+  ],
+  "BMY": [
+    {
+      "product": "Eliquis",
+      "rivals": "Johnson & Johnson's Xarelto (rival blood thinner)."
+    },
+    {
+      "product": "Opdivo",
+      "rivals": "Merck's Keytruda and Roche's Tecentriq (rival immunotherapies)."
+    }
+  ],
+  "PFE": [
+    {
+      "product": "Ibrance",
+      "rivals": "Eli Lilly's Verzenio and Novartis's Kisqali (rival breast cancer drugs)."
+    },
+    {
+      "product": "Vyndaqel family",
+      "rivals": "BridgeBio's Attruby and Alnylam's Amvuttra (rival heart disease drugs)."
+    }
+  ],
+  "LLY": [
+    {
+      "product": "Mounjaro/Zepbound",
+      "rivals": "Novo Nordisk's Ozempic and Wegovy injections and the Wegovy pill."
+    },
+    {
+      "product": "Trulicity",
+      "rivals": "Novo Nordisk's Ozempic and Wegovy injections and the Wegovy pill."
+    }
+  ],
+  "NVO": [
+    {
+      "product": "Ozempic/Wegovy",
+      "rivals": "Eli Lilly's Mounjaro and Zepbound injections and its Foundayo pill."
+    }
+  ],
+  "ABBV": [
+    {
+      "product": "Skyrizi/Rinvoq",
+      "rivals": "Johnson & Johnson's Tremfya and Stelara, Novartis's Cosentyx, and Takeda's Entyvio (rival immunology drugs), plus cheaper Humira biosimilars such as Amgen's Amjevita."
+    }
+  ],
+  "JNJ": [
+    {
+      "product": "Stelara/Tremfya",
+      "rivals": "AbbVie's Skyrizi and Rinvoq, and Amgen's Wezlana (a Stelara biosimilar)."
+    },
+    {
+      "product": "Darzalex",
+      "rivals": "Sanofi's Sarclisa (rival multiple myeloma drug)."
+    }
+  ],
+  "AZN": [
+    {
+      "product": "Tagrisso",
+      "rivals": "Johnson & Johnson's Rybrevant plus Lazcluze (rival lung cancer treatment)."
+    },
+    {
+      "product": "Farxiga",
+      "rivals": "Generic dapagliflozin and Boehringer Ingelheim/Lilly's Jardiance."
+    },
+    {
+      "product": "Imfinzi",
+      "rivals": "Merck's Keytruda."
+    }
+  ],
+  "AMGN": [
+    {
+      "product": "Repatha",
+      "rivals": "Regeneron's Praluent, Novartis's Leqvio, and Merck's Lipfendra (the first pill in this class)."
+    },
+    {
+      "product": "Enbrel",
+      "rivals": "AbbVie's Skyrizi and Rinvoq and Humira biosimilars."
+    }
+  ],
+  "GILD": [
+    {
+      "product": "Biktarvy",
+      "rivals": "ViiV Healthcare's Dovato and Cabenuva."
+    },
+    {
+      "product": "Yeztugo",
+      "rivals": "ViiV's Apretude."
+    }
+  ]
+}
