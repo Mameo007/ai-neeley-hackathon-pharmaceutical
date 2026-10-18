@@ -23,3 +23,6 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-scoring-selection.md`
   summary: Give the Peer Agent a first-pass top-~10 from scoring without selection side effects (or have the orchestrator run scoring -> peer -> scoring).
   evidence: §4.6 runs Peer on the first-pass top ~10; scoring.apply marks selected/recommended; ranked_units already exposes the order.
+- source_spec: `_bmad-output/implementation-artifacts/spec-synthesizer-ceo-move.md`
+  summary: Synthesizer should ignore a comparison.json that reports a failed or empty grid once the Comparison Builder defines its output (status field).
+  evidence: unverified (medium if true) — grid_used is `comparison.json exists and parses`; the grid's own shape is not specified yet, so a failed-state grid would be sent as data.
