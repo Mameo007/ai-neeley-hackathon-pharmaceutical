@@ -18,7 +18,7 @@ from pathlib import Path
 import anthropic
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-LOG_PATH = REPO_ROOT / "logs" / "api_usage.csv"
+LOG_PATH = Path(os.environ.get("PHARMER_LOGS_DIR", REPO_ROOT / "logs")) / "api_usage.csv"
 
 OPUS = "claude-opus-5-5"    # hunters, Synthesizer, CEO Move
 HAIKU = "claude-haiku-5-5"  # mechanical stages: Dedup judge, Fact Checker, Quant

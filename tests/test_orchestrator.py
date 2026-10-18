@@ -94,9 +94,15 @@ class StartTests(OrchestratorTestCase):
         self.assertEqual(list(status["stages"]),
                          ["corpus", "hunters", "dedup", "fact_checker", "quant", "priced_in",
                           "scoring", "peer", "scoring_after_peer"])
-        for name in ("fact_checker", "quant", "priced_in", "peer"):
+        for name in ("fact_checker", "quant"):
             self.assertEqual((status["stages"][name]["status"], status["stages"][name]["error"]),
                              ("skipped", "not built"))
+        # The two unbuilt agents are disabled by configuration, not skipped by discovery:
+        # the entry records why, carries no error, and is never "ok".
+        for name in orchestrator.DISABLED_STAGES:
+            entry = status["stages"][name]
+            self.assertEqual((entry["status"], entry["error"]), ("disabled", None))
+            self.assertEqual(entry["reason"], orchestrator.DISABLED_STAGES[name])
         self.assertEqual(status["stages"]["dedup"]["status"], "ok")
         self.assertFalse((run_dir / "run.json").exists())
 
