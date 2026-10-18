@@ -5,8 +5,7 @@
     finish : write the analyst's Sharpest Needle, product and rivals into run.json, then
              Comparison Builder -> Synthesizer -> CEO Move -> Report.
 
-Each stage is `await pharmer.<module>.run(run_dir)`. A stage in DISABLED_STAGES is not scheduled
-at all (pipeline.json lists it under "disabled"); a stage whose module is not on main yet is
+Each stage is `await pharmer.<module>.run(run_dir)`. A stage whose module is not on main yet is
 skipped visibly; a required stage that raises stops the phase, an optional one does not.
 Progress and per-stage timings go to runs/<run_id>/pipeline.json (a status sidecar, not a
 contract file), rewritten after every stage so a UI can poll it.
@@ -54,13 +53,6 @@ START_STAGES = [
     ("peer", "peer", False),
     ("scoring_after_peer", "scoring", True),
 ]
-# Start stages left out of the schedule on purpose, with the reason pipeline.json records.
-# Delete an entry to switch the stage back on. Scoring treats a missing priced-in check as
-# not priced in and a missing peer status as no demotion, so the ranking is materiality-based.
-DISABLED_STAGES = {
-    "priced_in": "disabled for the demo: the Priced-In Detector is not built yet",
-    "peer": "disabled for the demo: the Peer Agent is not built yet",
-}
 FINISH_STAGES = [
     ("comparison", "comparison", False),
     ("synthesizer", "synthesizer", True),
@@ -201,8 +193,7 @@ def prepare_run(ticker, corpus=None, runs_dir=None) -> Path:
         run_dir.mkdir()
     except FileExistsError:
         raise UsageError(f"{run_dir} already exists; start again in a minute") from None
-    _save(run_dir, {"ticker": ticker, "phase": "running", "started_at": _now(), "stages": {},
-                    "disabled": dict(DISABLED_STAGES)})
+    _save(run_dir, {"ticker": ticker, "phase": "running", "started_at": _now(), "stages": {}})
     return run_dir
 
 
@@ -210,8 +201,8 @@ async def run_start_stages(run_dir, corpus=None) -> Path:
     """Phase 1's stages on a prepared run folder; ends at "awaiting_human" or "failed"."""
     run_dir = Path(run_dir)
     status = read_status(run_dir)
-    stages = [s for s in START_STAGES if s[0] not in DISABLED_STAGES]
-    ok = await _run_stages(run_dir, status, [("corpus", _corpus_stage(corpus), True)] + stages)
+    ok = await _run_stages(run_dir, status,
+                           [("corpus", _corpus_stage(corpus), True)] + START_STAGES)
     status["phase"] = "awaiting_human" if ok else "failed"
     _save(run_dir, status)
     return run_dir

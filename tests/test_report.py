@@ -67,8 +67,6 @@ class HappyPathTests(ReportTestCase):
         self.assertEqual(m["thesis"]["headline"], "Illustrative: inventory 333 built up.")
         self.assertIn("222", m["thesis"]["verdict"])
         self.assertEqual(m["thesis"]["priced_in"], "partly priced in")
-        self.assertIs(m["thesis"]["market_assessed"], True)
-        self.assertIsNone(m["ranking_note"])
         self.assertEqual(m["comparison"]["status"], "missing")
         self.assertEqual(m["comparison"]["note"], report.NO_COMPARISON)
         self.assertEqual(m["ceo_move"]["status"], "ok")
@@ -199,47 +197,7 @@ class LabelTests(ReportTestCase):
         self.edit_finding("F-004", change)
         row = next(r for r in self.model()["findings"] if r["finding_id"] == "F-004")
         self.assertEqual(row["reasonings"][0]["badge"], "Unverified")
-        self.assertEqual(row["reasonings"][0]["priced_in"], "market pricing not assessed")
-
-
-class MarketNotAssessedTests(ReportTestCase):
-    """Priced-In Detector disabled: no reasoning carries a priced_in check."""
-
-    def setUp(self):
-        super().setUp()
-        self.edit("findings.json", lambda fs: [r.update(priced_in=None)
-                                               for f in fs for r in f.get("reasonings") or []])
-
-    def test_thesis_and_ranking_say_not_assessed(self):
-        m = self.model()
-        self.assertIsNone(m["thesis"]["priced_in"])  # synthesis.json still says partly_priced_in
-        self.assertIs(m["thesis"]["market_assessed"], False)
-        self.assertIsNotNone(m["thesis"]["verdict"])
-        self.assertEqual(m["ranking_note"], report.MATERIALITY_ONLY)
-        self.assertEqual(m["warnings"], [])  # an intentionally disabled stage is not a warning
-        self.assertEqual({r["priced_in"] for row in m["findings"] for r in row["reasonings"]},
-                         {"market pricing not assessed"})
-
-    def test_pdf_has_no_market_view_claim(self):
-        path = self.run_dir / "plain.pdf"
-        report.render_pdf(self.model(), path, compress=False)
-        data = path.read_bytes()
-        self.assertIn(b"Market pricing not assessed.", data)
-        self.assertIn(b"Ranked by materiality", data)
-        for text in (b"Market view", b"priced-in hits", b"Priced-In", b"Peer Agent",
-                     b"not built yet"):
-            self.assertNotIn(text, data)
-
-    def test_unsized_findings_are_not_called_materiality_ranked(self):
-        self.edit("findings.json", lambda fs: [r.update(impact=None)
-                                               for f in fs for r in f.get("reasonings") or []])
-        self.assertEqual(self.model()["ranking_note"], report.CONFIDENCE_ONLY)
-
-    def test_some_reasonings_checked_keeps_the_market_view(self):
-        self.edit_finding("F-003", lambda f: f["reasonings"][0].update(priced_in={"hits": 1}))
-        m = self.model()
-        self.assertIsNone(m["ranking_note"])
-        self.assertEqual(m["thesis"]["priced_in"], "partly priced in")
+        self.assertEqual(row["reasonings"][0]["priced_in"], "priced-in check not run")
 
 
 class FailureStateTests(ReportTestCase):
