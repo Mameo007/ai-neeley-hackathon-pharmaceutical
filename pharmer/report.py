@@ -14,7 +14,7 @@ import logging
 from pathlib import Path
 from xml.sax.saxutils import escape
 
-from pharmer import ceo_move
+from pharmer import ceo_move, scoring
 from pharmer import synthesizer as syn
 
 log = logging.getLogger(__name__)
@@ -30,6 +30,14 @@ CEO_FIELDS = [("action", "Action"), ("timeframe", "Timeframe"), ("trade_off", "T
 NEEDLE_HUMAN = "Named by the analyst."
 NEEDLE_FALLBACK = "AI-recommended; not yet confirmed by the analyst."
 NO_COMPARISON = "Comparison table not built for this run."
+# With no priced-in check, the Synthesizer counts every story as unseen (not_priced_in); the
+# report says the market view was not assessed instead of repeating that call.
+NOT_ASSESSED = "market pricing not assessed"
+MATERIALITY_ONLY = ("Ranked by materiality (EPS impact); market pricing not assessed, so no "
+                    "obscurity discount was applied.")
+# Scoring orders unscored reasonings by confidence (scoring.rank_key).
+CONFIDENCE_ONLY = ("Ranked by Fact Checker confidence: earnings impact was not sized and market "
+                   "pricing not assessed.")
 
 
 class Footnotes:
@@ -127,7 +135,7 @@ def _reasoning_model(reasoning, finding, notes):
         "quotes": [{"text": c.get("quote") or "", "notes": notes.cite([c.get("chunk_id")])}
                    for c in reasoning.get("citations") or []],
         "impact": "; ".join(impact_parts) or None,
-        "priced_in": ("priced-in check not run" if hits is None
+        "priced_in": (NOT_ASSESSED if hits is None
                       else f"{_fmt(hits)} priced-in hits"),
     }
 
@@ -146,6 +154,17 @@ def _chunk_ids(cited, selected):
         if not hit:
             unknown.append(cid)
     return out, unknown
+
+
+def _market_assessed(reasonings):
+    """Whether any of these reasonings went through the Priced-In Detector."""
+    return any(syn.priced_in_hits(r) is not None for r in reasonings)
+
+
+def _cited_reasonings(cited, selected):
+    """The selected reasonings behind cited finding/reasoning ids."""
+    return [r for f, rs in selected for r in rs
+            if f["finding_id"] in cited or r["reasoning_id"] in cited]
 
 
 def _cite_ids(cited, selected, notes):
@@ -200,7 +219,8 @@ def build_model(run_dir) -> dict:
 
     # Thesis: headline from the needle's own claims, then the Synthesizer's verdict.
     thesis = {"needle": needle, "needle_source": source, "headline": None,
-              "needle_note": None, "verdict": None, "priced_in": None, "notes": []}
+              "needle_note": None, "verdict": None, "priced_in": None,
+              "market_assessed": None, "notes": []}
     for finding, reasonings in selected:
         if finding["finding_id"] == needle:
             thesis["headline"] = (" ".join(r.get("claim") or "" for r in reasonings).strip()
@@ -216,7 +236,10 @@ def build_model(run_dir) -> dict:
                         "longer selected); verdict not shown.")
     else:
         thesis["verdict"] = synthesis["verdict"].strip()
-        thesis["priced_in"] = PRICED_IN_WORDS.get(synthesis.get("priced_in_call"))
+        thesis["market_assessed"] = _market_assessed(
+            _cited_reasonings(synthesis["citations"], selected))
+        if thesis["market_assessed"]:
+            thesis["priced_in"] = PRICED_IN_WORDS.get(synthesis.get("priced_in_call"))
         thesis["notes"] = _cite_ids(synthesis["citations"], selected, notes)
 
     # Findings: needle first, then by best selected-reasoning score (unscored last).
@@ -237,6 +260,11 @@ def build_model(run_dir) -> dict:
         rows.append({"number": number, "finding_id": finding["finding_id"],
                      "anchor": _anchor_text(finding.get("anchor")), "labels": labels,
                      "reasonings": [_reasoning_model(r, finding, notes) for r in reasonings]})
+    chosen = [r for _, rs in selected for r in rs]
+    ranking_note = None
+    if chosen and not _market_assessed(chosen):
+        sized = any(scoring.materiality(r) is not None for r in chosen)
+        ranking_note = MATERIALITY_ONLY if sized else CONFIDENCE_ONLY
     numbers = {row["finding_id"]: row["number"] for row in rows}
     thesis["needle_number"] = numbers.get(needle)
 
@@ -287,8 +315,8 @@ def build_model(run_dir) -> dict:
         log.warning("report: %s", w)
     return {"masthead": MASTHEAD, "tagline": TAGLINE, "run_id": run_dir.name,
             "tickers": tickers, "product": product, "warnings": warnings, "thesis": thesis,
-            "findings": rows, "comparison": comparison, "ceo_move": callout,
-            "footnotes": notes.as_list()}
+            "findings": rows, "ranking_note": ranking_note, "comparison": comparison,
+            "ceo_move": callout, "footnotes": notes.as_list()}
 
 
 # --- PDF rendering ---------------------------------------------------------------------------
@@ -379,12 +407,16 @@ def render_pdf(model, path, compress=True) -> None:
         line = f"{t(thesis['verdict'])} {_marks(thesis['notes'])}".strip()
         if thesis["priced_in"]:
             line += f" <b>Market view: {t(thesis['priced_in'])}.</b>"
+        elif thesis["market_assessed"] is False:
+            line += f" <b>{t(NOT_ASSESSED.capitalize())}.</b>"
         story.append(Paragraph(line, style["body"]))
     else:
         story.append(Paragraph("Growth-limiter verdict unavailable for this run (see "
                                "warnings).", style["body"]))
 
     story.append(Paragraph("Findings", style["h"]))
+    if model.get("ranking_note"):
+        story.append(Paragraph(f"<i>{t(model['ranking_note'])}</i>", style["body"]))
     if not model["findings"]:
         story.append(Paragraph("No findings were selected.", style["body"]))
     for row in model["findings"]:
