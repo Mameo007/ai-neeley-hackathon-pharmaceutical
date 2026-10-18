@@ -269,7 +269,8 @@ def corpus_overview(corpus):
     """Run-specific context for the first user message (kept out of the cached system prompt)."""
     lines = [f"Company: {corpus.company} ({corpus.ticker})", "", "Documents:"]
     for doc in corpus.manifest:
-        lines.append(f"- {doc['doc_id']}: {doc['doc_type']}, {doc['fiscal_period']}, "
+        lines.append(f"- {doc['doc_id']}: {doc['ticker']} {doc['doc_type']}, "
+                     f"{doc['fiscal_period']}, "
                      f"period end {doc['period_end']}, filed {doc['filed_date']}")
     metrics = sorted({f["metric"] for f in corpus.facts})
     lines += ["", f"Fact metrics available: {', '.join(metrics) or 'none'}"]
