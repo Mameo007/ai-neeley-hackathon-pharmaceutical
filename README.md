@@ -57,11 +57,17 @@ including `report.pdf` and `pipeline.json` (stage status and timings), are in `r
 ## Deploy on Render
 
 Create a Render Blueprint from this repository and select the branch containing
-`render.yaml`. It configures a Starter web service and a 1 GB persistent disk
-(paid Render resources). Enter `ANTHROPIC_API_KEY` and `PHARMER_SEC_UA` when
-prompted; keep secrets out of Git. Runs, PDFs, and API usage logs are stored under
-`/var/data` and survive deploys and restarts. Existing local runs are not uploaded.
-In-flight research jobs stop when the service restarts; completed files persist.
+`render.yaml`. It configures a Free web service with no paid disk or database.
+Enter `ANTHROPIC_API_KEY` and `PHARMER_SEC_UA` when prompted; keep secrets out of
+Git. Anthropic API usage is billed separately from hosting.
+
+Free services sleep after 15 minutes without inbound traffic and can take about
+a minute to wake up. Runs, PDFs, and API logs are temporary: they are lost on
+sleep, restart, or redeploy. Download reports before leaving the demo. Existing
+local runs are not uploaded, and in-flight jobs stop when the service restarts.
+Render includes 750 free instance hours per workspace per month. To avoid paid
+overages, use a workspace without a payment method; usage limits then suspend
+services or builds instead of billing. See https://render.com/docs/free.
 
 The health endpoint is `/_stcore/health`. Local startup remains unchanged.
 
