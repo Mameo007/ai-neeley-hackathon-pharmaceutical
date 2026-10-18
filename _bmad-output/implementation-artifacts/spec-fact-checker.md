@@ -314,6 +314,7 @@ by running the new tests against the staged original) and passes after.
 | Every judge call fired at once, so the cached prefix was never warm | unbounded `asyncio.gather` | first call alone, then `asyncio.Semaphore(JUDGE_CONCURRENCY)` — kept local to this stage, since the shared cap belongs in `pharmer/llm.py` and needs Partner B |
 | A chunk missing `text`/`page`/`doc_id` raised | direct `chunk["text"]` / `chunk['page']` indexing | `_chunk_text()` and `.get()` defaults; a malformed row is unverifiable evidence, not a crash |
 | A blank unit or currency on both sides counted as agreement | `"" == ""` satisfied the like-for-like gate | equal-but-absent is `unavailable`, not `reproduced`; one side blank stays a mismatch |
+| An agreeing fact from a document the manifest cannot place could reach High | the owner guard only excluded a *known* different ticker; unknown ownership fell through to `reproduced` | new `unattributed` tie status: the fact is still read and named, but it caps at Medium, so no High rests on evidence of unknown ownership |
 | A key-less run raised instead of capping at Medium | client construction raises `TypeError`, not an `anthropic` error, so only `AnthropicError` was caught | `TypeError`/`OSError` caught too, with the user message built outside the `try` so our own bugs still surface |
 
 Also fixed without behaviour change: unused `import copy`; the corpus table scan and trend

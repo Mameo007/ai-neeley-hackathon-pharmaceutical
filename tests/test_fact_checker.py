@@ -720,11 +720,42 @@ class CompanyScopeRegressionTests(FactCheckerTestCase):
         self.assertEqual([p["fiscal_period"] for p in self.by_id(findings)["F-001"]["trend"]],
                          ["FY2023", "FY2024", "Q2 2025", "FY2025", "Q2 2026"])
 
-    def test_a_fact_the_manifest_cannot_place_is_still_used(self):
-        # Only a *known* disagreement excludes evidence; an unlisted doc_id is not
-        # evidence of another company, and dropping it would lose the tie.
-        findings, _report = self.check("NVO")
+    def test_a_manifest_placed_fact_still_ties_to_high(self):
+        # The guard must not cost the documented ties: NVO-XBRL is in the manifest under
+        # ticker NVO, so FY2025 receivables still reproduce.
+        findings, report = self.check("NVO")
+        self.assertEqual(self.rows_by_id(report)["F-002"]["checks"]["tie"], "reproduced")
         self.assertEqual(self.by_id(findings)["F-002"]["confidence"], "High")
+
+    def test_an_unplaceable_fact_is_read_but_cannot_grant_high(self):
+        # Only a *known* disagreement excludes evidence - an unlisted doc_id is not
+        # evidence of another company, so the fact is still read and named. But it cannot
+        # certify a cross-source tie: High would then rest on evidence whose owner nobody
+        # can show, which is the cross-company error the guard exists to prevent.
+        rows = [dict(fact, doc_id="NVO-XBRL-UNLISTED") for fact in CORPUS["NVO"]["facts"]]
+        findings, report = self.check("NVO", fact_rows=rows)
+        row = self.rows_by_id(report)["F-002"]
+        self.assertEqual(row["checks"]["tie"], "unattributed")
+        self.assertEqual(row["tie_fact_id"], "NVO-xbrl-trade_receivables-FY2025")
+        self.assertIn("does not place", row["checks"]["tie_detail"])
+        self.assertEqual(self.by_id(findings)["F-002"]["confidence"], "Medium")
+
+    def test_a_finding_without_a_ticker_cannot_reach_high(self):
+        # Contract 2 requires `ticker`; without it nothing can be placed, so no tie can
+        # be certified and the honest ceiling is Medium.
+        findings = copy.deepcopy(FINDINGS["NVO"][1:2])
+        findings[0]["ticker"] = None
+        out, report = self.check("NVO", findings)
+        self.assertEqual(self.rows_by_id(report)["F-002"]["checks"]["tie"], "unattributed")
+        self.assertEqual(out[0]["reasonings"][0]["confidence"], "Medium")
+
+    def test_an_unplaceable_fact_of_another_period_is_still_a_mismatch(self):
+        # The ownership guard must not rescue a wrong-period extraction.
+        rows = [dict(fact, doc_id="LLY-XBRL-UNLISTED") for fact in CORPUS["LLY"]["facts"]]
+        findings = copy.deepcopy(FINDINGS["LLY"][2:3])  # 65,179 labelled FY2024
+        out, report = self.check("LLY", findings, fact_rows=rows)
+        self.assertEqual(self.rows_by_id(report)["F-003"]["checks"]["tie"], "mismatch")
+        self.assertEqual(out[0]["reasonings"][0]["confidence"], "Low")
 
 
 class LabelFindingRegressionTests(FactCheckerTestCase):
