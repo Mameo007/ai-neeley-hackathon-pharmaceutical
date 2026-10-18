@@ -1,0 +1,16 @@
+{
+  "status": "ok",
+  "sharpest_needle": "F-003",
+  "sharpest_needle_source": "human",
+  "action": "Illustrative: cut channel inventory of 333 by slowing shipments to wholesalers.",
+  "timeframe": "next two quarters",
+  "trade_off": "Illustrative: lower reported sales near term.",
+  "downside_if_wrong": "Illustrative: lost shelf share if demand is real.",
+  "why_it_works": "Illustrative: the build in 333 shows stock ahead of demand.",
+  "citations": [
+    "F-003",
+    "F-004-a"
+  ],
+  "verdict_used": true,
+  "error": null
+}
