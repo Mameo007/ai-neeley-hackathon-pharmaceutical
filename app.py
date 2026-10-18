@@ -36,11 +36,7 @@ PHASE_LABELS = {"running": "running", "awaiting_human": "needs your pick", "done
                 "failed": "failed", "interrupted": "interrupted"}
 
 # pipeline.json stage name -> (group, agent, one-line job), in run order. Stages that share an
-# agent name share one card (scoring runs twice). Stages in orchestrator.DISABLED_STAGES get no
-# card; with the Priced-In Detector off, Scoring ranks by impact alone.
-SCORING_JOB = ("Ranks findings by impact and by how hidden they are."
-               if "priced_in" not in orchestrator.DISABLED_STAGES
-               else "Ranks findings by their earnings impact.")
+# agent name share one card (scoring runs twice).
 STAGE_AGENTS = {
     "corpus": ("Collect", "Librarian", "Pulls the company's filings into one source library."),
     "hunters": ("Hunt", "The hunters", "Six specialists read every page for what changed."),
@@ -50,9 +46,10 @@ STAGE_AGENTS = {
     "quant": ("Check", "Quant", "Puts a dollar and earnings-per-share number on each finding."),
     "priced_in": ("Check", "Priced-In Detector",
                   "Checks whether Wall Street is already talking about it."),
-    "scoring": ("Rank", "Scoring", SCORING_JOB),
+    "scoring": ("Rank", "Scoring", "Ranks findings by impact and by how hidden they are."),
     "peer": ("Check", "Peer Agent", "Compares each finding with rivals' filings."),
-    "scoring_after_peer": ("Rank", "Scoring", SCORING_JOB),
+    "scoring_after_peer": ("Rank", "Scoring",
+                           "Ranks findings by impact and by how hidden they are."),
     "comparison": ("After your pick", "Comparison Builder",
                    "Lines your product up against its rivals."),
     "synthesizer": ("After your pick", "Synthesizer", "Writes the verdict on what limits growth."),
@@ -377,8 +374,6 @@ def agent_cards(status, run_dir, live=True, every=False):
     finishing = every or any(name in stages for name in FINISH_STAGE_NAMES)
     by_name = {}
     for stage, (group, name, job) in STAGE_AGENTS.items():
-        if stage in orchestrator.DISABLED_STAGES:
-            continue  # switched off on purpose: no card, not counted in the progress bar
         if stage in FINISH_STAGE_NAMES and not finishing:
             continue
         card = by_name.setdefault(name, {"group": group, "name": name, "job": job,
@@ -511,7 +506,6 @@ def result_model(run_dir):
             "headline": reasoning.get("claim") or model["thesis"]["headline"],
             "number": big_number(reasoning, finding.get("anchor")) if finding else None,
             "verdict": model["thesis"]["verdict"], "priced_in": model["thesis"]["priced_in"],
-            "market_assessed": model["thesis"]["market_assessed"],
             "verdict_note": next((w for w in model["warnings"]
                                   if w.startswith(("Synthesizer", "synthesis.json"))), None),
             "ai_pick": bool(needle) and model["thesis"]["needle_source"] != "human",
@@ -534,7 +528,7 @@ def why_line(r):
     impact = ("impact not sized yet" if r["materiality"] is None
               else f"moves earnings per share by about {_num(r['materiality'], 2)}%")
     hits = r["priced_in_hits"]
-    news = ("market pricing not assessed" if hits is None
+    news = ("not yet checked against the news" if hits is None
             else "no matching news stories found" if hits == 0
             else f"already in {hits} news {'story' if hits == 1 else 'stories'}")
     return f"{impact[0].upper()}{impact[1:]}; {news}."
@@ -595,12 +589,9 @@ def recovery(phase, status, run_dir, ticker):
 
 
 def stage_problems(status):
-    """Stages that did not simply succeed, for the warning above the stage table. A stage
-    switched off on purpose is not a problem (older runs still record it as skipped; the
-    Details table shows that)."""
+    """Stages that did not simply succeed, for the warning above the stage table."""
     return [(name, e.get("status"), e.get("error")) for name, e in status.get("stages", {}).items()
-            if e.get("status") in ("skipped", "degraded", "failed")
-            and name not in orchestrator.DISABLED_STAGES]
+            if e.get("status") in ("skipped", "degraded", "failed")]
 
 
 # --- background jobs --------------------------------------------------------------------------
@@ -828,13 +819,11 @@ def reasoning_block(r):
         st.html(f'<div class="pharmer-why">{html.escape(why_line(r))}</div>')
         score = "–" if r["score"] is None else r["score"]
         materiality = "–" if r["materiality"] is None else r["materiality"]
-        hits = r["priced_in_hits"]
-        formula = (f"Score {score} = materiality {materiality} (|EPS impact %|)"
-                   + ("; market pricing not assessed, so no obscurity discount" if hits is None
-                      else f" × obscurity {r['obscurity']} (priced-in hits: {hits})"))
+        hits = "not checked" if r["priced_in_hits"] is None else r["priced_in_hits"]
         with st.expander("How we scored it"):
-            st.caption(formula
-                       + f" · raised by {', '.join(h for h in r['hunters'] if h)}"
+            st.caption(f"Score {score} = materiality {materiality} (|EPS impact %|) × obscurity "
+                       f"{r['obscurity']} (priced-in hits: {hits})"
+                       f" · raised by {', '.join(h for h in r['hunters'] if h)}"
                        + (f" · confidence: {md(r['confidence_reason'])}"
                           if r.get("confidence_reason") else ""))
         for q in r["quotes"]:
@@ -960,8 +949,6 @@ def results_section(run_dir, ticker):
         if res["priced_in"]:
             chips.append(f'<span class="pharmer-chip a">market: {html.escape(res["priced_in"])}'
                          "</span>")
-        elif res["market_assessed"] is False:
-            chips.append('<span class="pharmer-chip">market pricing not assessed</span>')
         if chips or res["quote"]:
             st.html(f'<div class="pharmer-chips">{"".join(chips)}</div>'
                     + (quote_html(res["quote"]["text"], res["quote"]["source"])
