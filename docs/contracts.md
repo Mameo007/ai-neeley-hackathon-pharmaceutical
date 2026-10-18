@@ -93,6 +93,7 @@ reasonings make it a composite row (§4.2).
     {
       "reasoning_id": "F-007-a",
       "hunter": "channel_checker",
+      "hunters": ["channel_checker"],
       "claim": "Receivables grew 25.5% in six months while sales grew 3% (reported, CER), suggesting channel loading.",
       "citations": [
         {"chunk_id": "NVO-6K-2026Q2-p14-c03", "quote": "Trade receivables 87,123"}
@@ -131,7 +132,7 @@ reasonings make it a composite row (§4.2).
 | Field | Written by | Rule |
 |---|---|---|
 | `anchor`, `reasonings[].hunter/claim/citations`, `is_label_finding` | Hunters (B) | Every `chunk_id` must exist in `chunks.jsonl`; `quote` must be a verbatim substring of that chunk's `text` |
-| `contested`, merging into `reasonings[]`, `lead_reasoning_id` | Dedup (B) | Code groups by `anchor` (metric + entity + fiscal_period); LLM compares claims within a group |
+| `contested`, merging into `reasonings[]`, `lead_reasoning_id`, `reasonings[].hunters` | Dedup (B) | Code groups by `anchor` (metric + entity + fiscal_period); LLM compares claims within a group |
 | `confidence`, `confidence_reason`, `trend`, flags `reversal` / `possibly_seasonal` | Fact Checker (A) | Hunters leave `confidence` **null** — never self-assigned |
 | `impact` | Quant (A) | Arithmetic and FX done in Python; `formula` + `inputs` always filled |
 | `priced_in` | Priced-In Detector (B) | Web search only here; never used as evidence |
@@ -142,8 +143,31 @@ reasonings make it a composite row (§4.2).
 - `confidence` ∈ `High` | `Medium` | `Low` | `null`
 - `flags` ⊆ `reversal`, `possibly_seasonal`, `contested`,
   `peer_check_incomplete`, `unmapped_metric`
+- `hunter` is the agent that first raised the reasoning; `hunters` lists every hunter whose
+  lead was merged into it, in order, starting with `hunter`. *(Proposed by B, pending A's
+  sign-off.)*
 - Human output: `run.json` holds `"sharpest_needle": "<finding_id>"` and
   `"product": "<brand>"` once the human decides.
+
+### `leads.json` — hunter output, Dedup input *(proposed by B, pending A's sign-off)*
+
+Written by `pharmer/hunters` to `runs/<run_id>/leads.json`; read only by Dedup, which writes
+`findings.json`. A list of Contract 2 Findings with these restrictions:
+
+- Exactly **one** reasoning per Finding; one Finding per lead (no grouping yet).
+- `finding_id` `F-001`, `F-002`, … in hunter order; `reasoning_id` = `<finding_id>-a`. Dedup
+  renumbers both, so these ids never reach later stages.
+- Hunter fields filled (`anchor`, `is_label_finding`, `reasonings[0].hunter/claim/citations`);
+  every citation already checked against `chunks.jsonl`, and one quote contains `anchor.value`.
+- Everything else at its empty value: `contested: false`, `lead_reasoning_id: null`, no
+  `hunters`, `confidence`/`confidence_reason`/`impact`/`priced_in`/`score` `null`, `flags`/`trend`
+  `[]`, `peer` `{"status": null, "note": ""}`, `status: "candidate"`, `recommended: false`.
+- Dedup groups on `anchor.metric` + `anchor.entity` + `anchor.fiscal_period`, ignoring case,
+  spacing and a trailing legal form (`A/S`, `Inc.`, `plc`, …); periods are compared as labelled
+  (`H1 2026` ≠ `Q2 2026`). Hyphens count as spaces. `findings.json` carries the normalized
+  `metric` (snake_case) and `fiscal_period` (uppercase, single spaces).
+- `lead_reasoning_id` in `findings.json` is the earliest-raised reasoning (`-a`, hunter run
+  order), not the strongest; scoring ranks a composite row by its strongest reasoning.
 
 ---
 
