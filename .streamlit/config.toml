@@ -1,0 +1,21 @@
+# Dark "analyst terminal" theme (docs/ui-plan.md, step 1). Extra CSS lives in app.py (CSS).
+[theme]
+base = "dark"
+primaryColor = "#ffb020"
+backgroundColor = "#0a0d11"
+secondaryBackgroundColor = "#161c25"
+textColor = "#e8eaed"
+borderColor = "#232b37"
+linkColor = "#ffb020"
+greenColor = "#35d07f"
+redColor = "#ff5d5d"
+orangeColor = "#ffb020"
+blueColor = "#4ea1ff"
+codeBackgroundColor = "#1d2632"
+font = "-apple-system, 'Helvetica Neue', Arial, sans-serif"
+codeFont = "'SF Mono', Menlo, 'JetBrains Mono', monospace"
+baseRadius = "8px"
+showWidgetBorder = true
+
+[client]
+toolbarMode = "minimal"
