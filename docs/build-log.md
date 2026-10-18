@@ -19,3 +19,4 @@ The pitch deck and How-we-did-it report are built from this file.
 - 2026-10-18 [B] decision: prompt caching on every call; shared prefix (rules + tools) byte-identical across hunters; warm the cache with one call before fanning out to 8 hunters.
 - 2026-10-18 [B] decision: every API call logged per request to logs/api_usage.csv (Contract 3) via shared pharmer/llm.py; models: Opus 5.5 for hunters/Synthesizer/CEO Move, Haiku 5.5 for mechanical stages; server-side refusal fallback on Opus calls.
 - 2026-10-18 [Claude] test: pharmer/llm.py offline tests pass (4/4, fake client, no API calls); not yet run against the real API.
+- 2026-10-18 [B] decision: coding conventions in docs/conventions.md — snake_case code/JSON/agent names, kebab-case branches and log stage, one module per stage with async run(run_dir), prompts as pharmer/prompts/<agent>.md (no run-varying values, for caching), offline-only tests. PHARMER_PARTNER (.env) tags each API usage row with A/B.
