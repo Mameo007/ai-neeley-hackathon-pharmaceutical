@@ -20,6 +20,9 @@ from pharmer import librarian
 REPO_ROOT = Path(__file__).resolve().parent.parent
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 CASE = REPO_ROOT / "docs" / "neeley_ai_forward_case_study.md"
+CASE_NAMES = {"MRK": "Merck", "BMY": "Bristol Myers Squibb", "PFE": "Pfizer", "LLY": "Eli Lilly",
+              "NVO": "Novo Nordisk", "ABBV": "AbbVie", "JNJ": "Johnson & Johnson",
+              "AZN": "AstraZeneca", "AMGN": "Amgen", "GILD": "Gilead"}  # as the appendix spells them
 RUN_FILES = {"findings.json": "synthesis_findings.json", "run.json": "synthesis_run.json",
              "manifest.json": "report_manifest.json", "chunks.jsonl": "report_chunks.jsonl"}
 START_DONE = {"scoring_after_peer": {"status": "ok", "seconds": 0.0, "error": None}}
@@ -129,6 +132,30 @@ class HelperTests(AppTestCase):
                          [("b", "skipped", "x"), ("c", "degraded", "y")])
 
 
+class CompanyTileTests(unittest.TestCase):
+    def test_tiles_follow_the_shortlist_with_threads_and_ready_badge(self):
+        tiles = app.company_tiles()
+        self.assertEqual([t["ticker"] for t in tiles], list(librarian.CIKS))
+        self.assertTrue(all(t["thread"] for t in tiles))
+        self.assertEqual([t["ticker"] for t in tiles if t["ready"]], ["NVO"])
+        self.assertEqual(app.default_company(tiles), "NVO")
+        for tile in tiles:
+            tile["ready"] = False
+        self.assertEqual(app.default_company(tiles), "MRK")
+
+    def test_missing_thread_file_gives_empty_threads(self):
+        self.assertEqual(app.load_threads(REPO_ROOT / "no-such.json"), {})
+        self.assertEqual(app.company_tiles(threads={})[0]["thread"], "")
+
+    def test_tile_html_escapes_and_shows_the_badge_only_when_ready(self):
+        tile = {"ticker": "JNJ", "name": "Johnson & Johnson", "thread": "<b>x</b>", "ready": False}
+        out = app.tile_html(tile)
+        self.assertIn("Johnson &amp; Johnson", out)
+        self.assertIn("&lt;b&gt;x&lt;/b&gt;", out)
+        self.assertNotIn("filings ready", out)
+        self.assertIn("filings ready", app.tile_html(dict(tile, ready=True)))
+
+
 class ProductListTests(unittest.TestCase):
     """data/products.json must come from the case appendix, never from model memory."""
 
@@ -141,6 +168,14 @@ class ProductListTests(unittest.TestCase):
             for entry in entries:
                 self.assertIn(entry["product"], text)
                 self.assertIn(entry["rivals"], text)
+
+    def test_every_starter_thread_is_in_the_case_document(self):
+        text = CASE.read_text(encoding="utf-8")
+        threads = app.load_threads()
+        self.assertEqual(set(threads), set(librarian.CIKS))
+        for ticker, thread in threads.items():
+            self.assertTrue(thread, ticker)
+            self.assertIn(f"* **{CASE_NAMES[ticker]}:** {thread}\n", text)  # its own company's line
 
 
 class ThemeTests(unittest.TestCase):
@@ -168,8 +203,38 @@ class PageTests(AppTestCase):
         self.assertEqual(at.title[0].value, "PHARMER RESEARCH")
         self.assertEqual(len(at.sidebar.children), 0)  # the run picker left the sidebar
         self.assertEqual(at.expander[0].label, "Past runs (0)")
-        self.assertEqual(at.button[0].label, "Start run")
-        self.assertEqual(len(at.toggle), 0)  # first company (ABBV) has no prebuilt corpus
+        self.assertEqual(at.header[0].value, "Pick a company. Our agents read its filings.")
+        self.assertEqual(len([b for b in at.button if b.key and b.key.startswith("pick-")]), 10)
+        self.assertEqual(self.cta(at).label, "Find the needle in Novo Nordisk →")
+        self.assertEqual(len(at.toggle), 1)  # NVO, selected first, has prebuilt filings
+
+    def cta(self, at):
+        return next(b for b in at.button if b.label.startswith("Find the needle in"))
+
+    def test_clicking_a_tile_selects_the_company(self):
+        at = self.page()
+        at.button(key="pick-AMGN").click().run()
+        self.assertFalse(at.exception)
+        self.assertEqual(self.cta(at).label, "Find the needle in Amgen →")
+        self.assertEqual(len(at.toggle), 0)  # no prebuilt filings for Amgen
+        with mock.patch.object(orchestrator, "prepare_run",
+                               return_value=self.runs / "AMGN-X") as prepare, \
+                mock.patch.object(app, "launch"):
+            self.cta(at).click().run()
+        self.assertEqual(prepare.call_args.args[0], "AMGN")
+        self.assertIsNone(prepare.call_args.kwargs["corpus"])
+
+    def test_prebuilt_toggle_does_not_follow_to_a_company_without_filings(self):
+        at = self.page()
+        at.toggle[0].set_value(True).run()
+        self.assertEqual(at.button(key="pick-NVO").label, "Novo Nordisk (selected)")
+        at.button(key="pick-AMGN").click().run()
+        with mock.patch.object(orchestrator, "prepare_run",
+                               return_value=self.runs / "AMGN-X") as prepare, \
+                mock.patch.object(app, "launch"):
+            self.cta(at).click().run()
+        self.assertEqual(prepare.call_args.args[0], "AMGN")
+        self.assertIsNone(prepare.call_args.kwargs["corpus"])
 
     def test_query_param_opens_a_run_from_past_runs(self):
         self.make_run("NVO-20261018-0100", "awaiting_human", "x")
@@ -184,7 +249,7 @@ class PageTests(AppTestCase):
         at = self.page("NVO-20261018-0100")
         next(b for b in at.button if b.label == "➕ New run").click().run()
         self.assertFalse(at.exception)
-        self.assertEqual(at.subheader[0].value, "Start a new run")
+        self.assertEqual(at.header[0].value, "Pick a company. Our agents read its filings.")
 
     def test_paused_run_shows_review_and_pick(self):
         self.make_run("NVO-20261018-0100", "awaiting_human", "x")
@@ -241,12 +306,11 @@ class PageTests(AppTestCase):
     def test_start_uses_prebuilt_only_when_toggled(self):
         for toggled, expected in ((False, None), (True, REPO_ROOT / "data" / "sample" / "NVO")):
             at = self.page()
-            next(s for s in at.selectbox if s.label == "Company").set_value("NVO").run()
             at.toggle[0].set_value(toggled)
             with mock.patch.object(orchestrator, "prepare_run",
                                    return_value=self.runs / "NVO-X") as prepare, \
                     mock.patch.object(app, "launch"):
-                at.button[0].click().run()
+                self.cta(at).click().run()
             self.assertEqual(prepare.call_args.kwargs["corpus"], expected)
 
     def test_running_run_shows_progress(self):
