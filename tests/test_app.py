@@ -15,7 +15,7 @@ from streamlit.testing.v1 import AppTest
 
 import app
 import orchestrator
-from pharmer import librarian
+from pharmer import hunters, librarian
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
@@ -130,6 +130,104 @@ class HelperTests(AppTestCase):
                              "c": {"status": "degraded", "error": "y"}}}
         self.assertEqual(app.stage_problems(status),
                          [("b", "skipped", "x"), ("c", "degraded", "y")])
+
+
+class AgentCardTests(AppTestCase):
+    def test_every_pipeline_stage_and_hunter_has_a_plain_name(self):
+        stages = ["corpus"] + [name for name, _, _ in orchestrator.START_STAGES
+                               + orchestrator.FINISH_STAGES]
+        self.assertEqual(list(app.STAGE_AGENTS), stages)  # same order as the run
+        self.assertEqual(set(app.HUNTER_NAMES), {h.NAME for h in hunters.HUNTERS})
+
+    def cards(self, stages, run_dir=None):
+        name = "NVO-20261018-0100"
+        run_dir = run_dir or (self.runs / name if (self.runs / name).is_dir()
+                              else self.make_run(name, "running", "x", stages={}))
+        return {c["name"]: c for c in app.agent_cards({"stages": stages}, run_dir)}
+
+    def test_card_states_follow_the_stages(self):
+        ok = {"status": "ok"}
+        cards = self.cards({"corpus": ok, "hunters": ok, "dedup": {"status": "running"},
+                            "priced_in": {"status": "skipped", "error": "not built"}})
+        self.assertEqual(list(cards), ["Librarian", "The hunters", "Dedup", "Fact Checker",
+                                       "Quant", "Priced-In Detector", "Scoring", "Peer Agent"])
+        self.assertEqual([(c["status"], c["state"]) for c in cards.values()][:3],
+                         [("ok", "✓"), ("ok", "✓"), ("running", "working")])
+        self.assertEqual(cards["Quant"]["state"], "waiting")
+        self.assertEqual(cards["Priced-In Detector"]["state"], "not built")
+        self.assertIn("Redliner", cards["The hunters"]["who"])
+        self.assertAlmostEqual(app.progress_fraction(list(cards.values())), 3 / 8)
+
+    def test_scoring_card_spans_both_scoring_stages(self):
+        self.assertEqual(self.cards({"scoring": {"status": "ok"}})["Scoring"]["status"],
+                         "ok")  # first pass done; no pulse while Peer runs
+        both = {"scoring": {"status": "ok"}, "scoring_after_peer": {"status": "ok"}}
+        self.assertEqual(self.cards(both)["Scoring"]["status"], "ok")
+        both["scoring_after_peer"] = {"status": "failed", "error": "x"}
+        card = self.cards(both)["Scoring"]
+        self.assertEqual((card["status"], card["state"]), ("failed", "error"))
+        self.assertIn("Stopped with an error", card["problem"])
+
+    def test_cards_after_the_job_ended(self):
+        run_dir = self.make_run("NVO-20261018-0100", "failed", "x", stages={})
+        status = {"phase": "failed", "stages": {"corpus": {"status": "ok"},
+                                                "hunters": {"status": "running"}}}
+        cards = {c["name"]: c for c in app.agent_cards(status, run_dir, live=False)}
+        self.assertEqual((cards["The hunters"]["state"], cards["Dedup"]["state"]),
+                         ("stopped", "not reached"))
+        self.assertIn("Stopped mid-step", cards["The hunters"]["problem"])
+        self.assertAlmostEqual(app.progress_fraction(list(cards.values())), 1 / 8)
+        paused = {"phase": "awaiting_human",
+                  "stages": {n: {"status": "ok"} for n in app.STAGE_AGENTS
+                             if n not in app.FINISH_STAGE_NAMES}}
+        every = app.agent_cards(paused, run_dir, live=False, every=True)
+        self.assertEqual({c["state"] for c in every if c["group"] == "After your pick"},
+                         {"waiting"})  # still ahead, not "not reached"
+        self.assertAlmostEqual(app.progress_fraction(every), 8 / 12)
+
+    def test_hunter_discovery_tolerates_bad_rows(self):
+        run_dir = self.make_run("NVO-20261018-0100", "running", "x", stages={})
+        (run_dir / "leads.json").write_text('[1, {"reasonings": [{}]}]', encoding="utf-8")
+        self.assertEqual(self.cards({"hunters": {"status": "ok"}}, run_dir)["The hunters"]["found"],
+                         "2 leads: unknown 2")
+
+    def test_after_pick_cards_only_once_finishing(self):
+        self.assertNotIn("CEO Move", self.cards({"scoring_after_peer": {"status": "ok"}}))
+        cards = self.cards({"synthesizer": {"status": "degraded", "error": "no verdict"}})
+        self.assertEqual(cards["Synthesizer"]["state"], "problem")
+        self.assertEqual(cards["CEO Move"]["state"], "waiting")
+
+    def test_discoveries_are_counts_from_the_run_files(self):
+        run_dir = self.make_run("NVO-20261018-0100", "running", "x", stages={})
+        lead = {"reasonings": [{"hunter": "channel_checker"}]}
+        (run_dir / "leads.json").write_text(json.dumps([lead, lead, {"reasonings": [
+            {"hunter": "gross_to_net"}]}]), encoding="utf-8")
+        names = ["corpus", "hunters", "dedup", "fact_checker", "quant", "scoring",
+                 "scoring_after_peer"]
+        cards = self.cards({n: {"status": "ok"} for n in names}, run_dir)
+        findings = json.loads((run_dir / "findings.json").read_text())
+        manifest = json.loads((run_dir / "manifest.json").read_text())
+        self.assertEqual(cards["Librarian"]["found"], app._n(len(manifest), "document")
+                         + " in the library")
+        self.assertEqual(cards["The hunters"]["found"],
+                         "3 leads: Channel Checker 2, Gross-to-Net 1")
+        self.assertEqual(cards["Dedup"]["found"], f"{len(findings)} distinct findings")
+        self.assertEqual((app._n(1, "lead"), app._n(0, "lead")), ("1 lead", "0 leads"))
+        selected = sum(f["status"] == "selected" for f in findings)
+        self.assertEqual(cards["Scoring"]["found"],
+                         app._n(selected, "finding") + " selected for your pick")
+        self.assertTrue(cards["Fact Checker"]["found"].startswith("High "))
+        self.assertRegex(cards["Quant"]["found"], rf"^\d+ of {len(findings)} findings sized")
+        self.assertEqual(self.cards({"dedup": {"status": "running"}}, run_dir)["Dedup"]["found"],
+                         "")  # only once the agent is done
+
+    def test_cards_html_escapes(self):
+        card = {"group": "Hunt", "name": "<x>", "job": "a & b", "status": "ok", "state": "✓",
+                "who": "", "found": "<i>", "problem": ""}
+        out = app.cards_html([card])
+        self.assertIn("&lt;x&gt;", out)
+        self.assertIn("a &amp; b", out)
+        self.assertIn("↳ &lt;i&gt;", out)
 
 
 class CompanyTileTests(unittest.TestCase):
@@ -317,11 +415,14 @@ class PageTests(AppTestCase):
         run_dir = self.make_run("NVO-20261018-0100", "running", "x",
                                 stages={"hunters": {"status": "running", "seconds": 1.0,
                                                     "error": None}})
-        with mock.patch.object(app, "live_runs", return_value=frozenset({str(run_dir)})):
+        with mock.patch.object(app, "live_runs", return_value=frozenset({str(run_dir)})), \
+                mock.patch.object(app, "agents_section") as cards:
             at = self.page("NVO-20261018-0100")
         self.assertFalse(at.exception)
         self.assertIn("Working", at.info[0].value)
         self.assertEqual(len(at.radio), 0)
+        self.assertEqual(cards.call_args.args[0], run_dir)  # the cards replace the stage table
+        self.assertEqual(at.expander[-1].label, "Details")
 
     def test_interrupted_run_offers_the_retry_mark(self):
         self.make_run("NVO-20261018-0100", "running", "x")
@@ -340,7 +441,8 @@ class PageTests(AppTestCase):
         at = self.page("NVO-20261018-0100")
         self.assertFalse(at.exception)
         self.assertEqual(len(at.radio), 0)
-        self.assertIn("dedup", at.warning[0].value)
+        self.assertIn("**Dedup**: stopped with an error", at.warning[0].value)
+        self.assertNotIn("boom", at.warning[0].value)  # the raw error stays in Details
 
 
 if __name__ == "__main__":
