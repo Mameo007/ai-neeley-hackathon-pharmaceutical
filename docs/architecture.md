@@ -80,9 +80,9 @@ These were the load-bearing decisions that shape every stage below:
 | 2 | Dedup/merge | Dedup/merge step (code + LLM judge) | per fact-anchor group |
 | 3 | Independent verification | **Fact Checker** | runs per candidate |
 | 4 | Impact quantification | **Quant agent** | runs per candidate |
-| 5 | Priced-in / obscurity check | **Priced-In Detector** | runs per candidate |
+| 5 | Priced-in / obscurity check | **Priced-In Detector** *(deferred, §9.5)* | runs per candidate |
 | 6 | Scoring & ranking | **Selection/scoring logic** (code, not an agent persona) | 1 |
-| 7 | Peer re-rank | **Peer Agent** | runs once, only on top ~10 |
+| 7 | Peer re-rank | **Peer Agent** *(deferred, §9.5)* | runs once, only on top ~10 |
 | 8 | Final 5 + Sharpest Needle | AI selects 5 and tags one Recommended; **human names the Sharpest Needle** | 1 |
 | 9 | Product selection | Hybrid dropdown (AI pre-select + user confirm) | 1 |
 | 10 | Label/rival-specific hunting | **Label Lawyer** (+ rival fetch) | runs after product is fixed |
@@ -101,10 +101,10 @@ flowchart TD
     subgraph Corpus["Librarian corpus (shared, page-indexed, closed-book source of truth)"]
         C1[2 latest 10-K / 20-F]
         C2["latest 10-Q / 6-K<br/>+ prior-year same quarter"]
-        C3["Last 4 earnings-call transcripts<br/>(pre-bundled)"]
-        C4["Rival filings<br/>(EDGAR + pre-bundled non-EDGAR rival ARs)"]
+        C3["Last 4 earnings-call transcripts<br/>(pre-bundled)<br/><i>deferred, §9.5</i>"]
+        C4["Rival filings<br/>(EDGAR + pre-bundled non-EDGAR rival ARs)<br/><i>deferred, §9.5</i>"]
         C5["DailyMed labels<br/>(labeler-code filtered)"]
-        C6[Orange/Purple Book]
+        C6["Orange/Purple Book<br/><i>deferred, §9.5</i>"]
         C7[XBRL structured data]
         C8[IR Excel financial workbooks]
     end
@@ -115,18 +115,18 @@ flowchart TD
     Corpus --> H3[Channel Checker]
     Corpus --> H4[Table Archaeologist]
     Corpus --> H5[Footnote Miner]
-    Corpus --> H6[Call Decoder]
+    Corpus --> H6["Call Decoder<br/><i>deferred, §9.5</i>"]
     Corpus --> H7[Label Lawyer - company-wide pass]
-    Corpus --> H8[Peer Contraster]
+    Corpus --> H8["Peer Contraster<br/><i>deferred, §9.5</i>"]
 
     H1 & H2 & H3 & H4 & H5 & H6 & H7 & H8 --> D["Dedup / merge<br/>code groups by fact anchor,<br/>LLM compares reasonings"]
 
     D --> E["Fact Checker<br/>re-open chunk, string-match quote,<br/>number-tie vs XBRL or IR workbook,<br/>trend strip + like-for-like check"]
     E --> F["Quant agent<br/>LLM picks formula + inputs,<br/>Python executes arithmetic + FX"]
-    F --> G["Priced-In Detector<br/>web search: already discussed? stock moved? material?"]
+    F --> G["Priced-In Detector<br/>web search: already discussed? stock moved? material?<br/><i>deferred, §9.5</i><br/>(skipped: obscurity counts as 1.0)"]
 
     G --> SEL["Selection / scoring<br/>(see decision-flow diagram)"]
-    SEL --> PEER["Peer Agent<br/>runs once, top ~10 only<br/>demotes industry-wide findings"]
+    SEL --> PEER["Peer Agent<br/>runs once, top ~10 only<br/>demotes industry-wide findings<br/><i>deferred, §9.5</i><br/>(skipped: no demotion)"]
     PEER --> AISEL["AI selects final 5<br/>(diversity rule enforced),<br/>tags ONE as Recommended"]
     AISEL --> HUMAN["Human<br/>sees the 5, NAMES Sharpest Needle<br/>(accept Recommended or pick another of the 5)"]
 
@@ -144,6 +144,9 @@ flowchart TD
     HUMAN --> REPORT
 
     REPORT --> OUT[Download / Email]
+
+    classDef deferred stroke-dasharray: 5 5,fill:#eeeeee,color:#777777
+    class C3,C4,C6,H6,H8,G,PEER deferred
 ```
 
 ### 3.3 Hunter-swarm fan-out / fan-in
@@ -151,7 +154,8 @@ flowchart TD
 All 8 hunters read the *same* Librarian corpus independently and in
 parallel; none of them talk to each other; all of them funnel into a single
 dedup/merge step that is the only point where overlapping leads are
-reconciled before verification begins.
+reconciled before verification begins. (For the hackathon build, Call Decoder
+and Peer Contraster are deferred, so 6 hunters run; dashed boxes, §9.5.)
 
 ```mermaid
 flowchart LR
@@ -160,13 +164,16 @@ flowchart LR
     LIB --> CC[Channel Checker<br/>inventory/receivables vs revenue]
     LIB --> TA[Table Archaeologist<br/>restated/dropped segments]
     LIB --> FM[Footnote Miner<br/>reserves, royalties, earn-outs, tax]
-    LIB --> CD[Call Decoder<br/>dodges, new phrases, dropped metrics]
+    LIB --> CD["Call Decoder<br/>dodges, new phrases, dropped metrics<br/><i>deferred, §9.5</i>"]
     LIB --> LL[Label Lawyer<br/>label breadth/boxed warnings/REMS]
-    LIB --> PC[Peer Contraster<br/>IRA/MFN/tariff exposure vs peers]
+    LIB --> PC["Peer Contraster<br/>IRA/MFN/tariff exposure vs peers<br/><i>deferred, §9.5</i>"]
 
     R & GTN & CC & TA & FM & CD & LL & PC --> POOL[(Lead pool)]
     POOL --> DEDUP[Dedup / merge]
     DEDUP --> TABLE[Findings table<br/>enters Fact Checker]
+
+    classDef deferred stroke-dasharray: 5 5,fill:#eeeeee,color:#777777
+    class CD,PC deferred
 ```
 
 ### 3.4 Execution model & run-time budget
@@ -277,9 +284,9 @@ and proposes candidate findings with a citation (chunk ID) for every claim.
 | **Channel Checker** | Inventory/receivables vs. revenue | Inventory or receivables growing faster than revenue (softening demand, pre-launch stocking, channel stuffing) |
 | **Table Archaeologist** | Segment/product table changes | Restated or dropped prior-period numbers, products quietly no longer broken out |
 | **Footnote Miner** | Footnotes | Litigation reserves, partner royalty splits, earn-out/acquisition payments, tax-rate changes |
-| **Call Decoder** | Earnings-call Q&A | Deflected questions, new phrases, metrics the company stopped reporting |
+| **Call Decoder** *(deferred, §9.5)* | Earnings-call Q&A | Deflected questions, new phrases, metrics the company stopped reporting |
 | **Label Lawyer** | Product fine print | Label breadth, boxed warnings, REMS requirements vs. rivals (runs a company-wide pass early; a second, product-specific pass runs after product selection, §6) |
-| **Peer Contraster** | Peer contrast | Company's differential exposure to IRA/MFN/tariffs vs. shortlist peers |
+| **Peer Contraster** *(deferred, §9.5)* | Peer contrast | Company's differential exposure to IRA/MFN/tariffs vs. shortlist peers |
 
 - **Scope dependency:** Librarian coverage must satisfy every hunter's
   needs, including peer companies' filings (Peer Contraster) and rival
@@ -539,10 +546,10 @@ is which of those 5 is the Sharpest Needle.
 flowchart TD
     START["Fact-checked, quantified, priced-in-checked<br/>findings table"] --> GATE{"Confidence gate:<br/>Low?"}
     GATE -- "Low: dropped" --> DROP[Excluded from scoring]
-    GATE -- "Medium or High" --> SCORE["Score =<br/>Materiality (Quant % of EPS)<br/>x Obscurity (Priced-In Detector)"]
+    GATE -- "Medium or High" --> SCORE["Score =<br/>Materiality (Quant % of EPS)<br/>x Obscurity (Priced-In Detector;<br/>1.0 while it is deferred, §9.5)"]
 
     SCORE --> TOP10["Rank, take top ~10"]
-    TOP10 --> PEER["Peer Agent re-rank<br/>(runs once, only here)<br/>industry-wide -> demoted;<br/>peer check incomplete -> no demotion"]
+    TOP10 --> PEER["Peer Agent re-rank<br/>(runs once, only here)<br/>industry-wide -> demoted;<br/>peer check incomplete -> no demotion<br/><i>deferred, §9.5</i><br/>(skipped: no demotion)"]
     PEER --> FILL["Greedy fill of 5 by score<br/>skip any that pushes a hunter past 2"]
 
     FILL --> LBL{">=1 label/product<br/>finding in the 5?"}
@@ -557,6 +564,9 @@ flowchart TD
     FIVE --> REC["Tag highest-scoring of the 5<br/>as Recommended"]
     REC --> HUMAN{"Human names Sharpest Needle:<br/>accept Recommended or<br/>pick another of the 5"}
     HUMAN --> NEXT["Feeds: product selection,<br/>Comparison Builder tie-in,<br/>Synthesizer, CEO Move agent"]
+
+    classDef deferred stroke-dasharray: 5 5,fill:#eeeeee,color:#777777
+    class PEER deferred
 ```
 
 ---
@@ -744,6 +754,26 @@ several, each caught by checking against the primary source:
    usable.
 7. **Report visual template** — branding and structure are fixed; the PDF's
    visual design is produced at build time.
+
+### 9.5 Deferred for the hackathon deadline (decided 2026-10-18)
+
+Cut to ship on time; the design above stays the target. In the diagrams
+(§3.2, §3.3, §5.3) deferred parts are dashed grey boxes marked "deferred, §9.5". Each cut stage is
+skipped visibly by the orchestrator ("skipped: not built"), and the
+fallbacks below are already in code.
+
+| Deferred | Why it can wait | What runs instead |
+|---|---|---|
+| **Peer Agent** (§4.6) | No rival filings in the corpus yet, so every finding would be "peer check incomplete" (no demotion) anyway | Scoring treats peer as null ⇒ no demotion |
+| **Peer Contraster** hunter | Same: needs rival filings | 6 of the 8 hunters run |
+| **Call Decoder** hunter | No transcripts in the corpus; §7 already plans for their absence | Marked skipped, per §7 |
+| **Priced-In Detector** (§4.5) | Verdict's priced-in call is written by the Synthesizer from the selected findings | Scoring counts unchecked as not priced in (obscurity 1.0), so ranking is by Materiality alone |
+| Orange / Purple Book fetch | Only the patent/exclusivity row needs it | That row prints "not disclosed" (§4.7 rule) |
+| Report polish: skipped-stage notes in the PDF, per-cell comparison footnotes, rivals field in the UI | Cosmetic / CLI `--rivals` works | Stage status in `pipeline.json`; cell sources in `comparison_sources.json` |
+
+**Not deferred (ship path):** Label Lawyer hunter (the final 5 must hold a
+label/product finding, §5.1 label guarantee), the Synthesizer's crash with
+no API credential, Quant (Partner A), then one real end-to-end run.
 
 ---
 
