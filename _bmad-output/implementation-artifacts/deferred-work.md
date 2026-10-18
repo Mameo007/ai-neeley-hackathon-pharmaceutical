@@ -91,6 +91,45 @@ existing entries.
     quarterly findings cannot reach High confidence without this. Needs IR-site
     discovery plus an .xlsx reader; deferred as the open-ended half of the
     structured-facts work.
+- source_spec: `_bmad-output/implementation-artifacts/spec-fact-checker.md`
+  summary: Decide, with Partner B, whether a reasoning whose verification raises should
+    cost the whole stage its results — `asyncio.gather` has no `return_exceptions`.
+  evidence: Review finding #24, confirmed by reading `pharmer/fact_checker.py`. One
+    raising reasoning discards every verdict already computed for the run. The
+    demonstrated crash path (no credentials) is now fixed, so what remains is a design
+    question: a blanket handler would hide genuine defects, and `pharmer/dedup.py` fans
+    out the same way, so the fix belongs to both stages at once — probably in
+    `pharmer/llm.py`, which both partners own.
+- source_spec: `_bmad-output/implementation-artifacts/spec-fact-checker.md`
+  summary: Judge `metric_label_matches: null` never blocks High, so a cited subtotal that
+    happens to equal the statement line could pass unchallenged.
+  evidence: Review finding #25, verdict maybe-false. The judge returns null only when no
+    row label appears in the quotes, and such a citation must still carry the anchor's own
+    figure. What would settle it: a real filing where a segment or product subtotal equals
+    the statement-line total exactly, cited as that line. If one exists, the deterministic
+    label check should run on the cited row rather than only filtering corpus hits.
+- source_spec: `_bmad-output/implementation-artifacts/spec-fact-checker.md`
+  summary: Two facts equidistant from an anchor on the half-unit rounding boundary resolve
+    by file order rather than by being reported as ambiguous.
+  evidence: Review finding #26. `45,042.5` ties both `45,042` and `45,043`, which is the
+    correct reading of "what rounding could have changed", but the first fact in file
+    order wins silently. Not observed on any real filing in the LLY or NVO corpora;
+    worth revisiting if the concept map grows metrics reported at mixed precision.
+- source_spec: `_bmad-output/implementation-artifacts/spec-fact-checker.md`
+  summary: `_moves` drops a period-to-period change whose earlier value is zero, so a
+    series crossing zero can hide a reversal.
+  evidence: Review finding #27, confirmed by reading `_moves` (`if not before: continue`).
+    The percentage change from zero is undefined, and no metric in `CONCEPT_MAP` crosses
+    zero in either corpus — but `operating_profit` or `net_profit` could for a loss-making
+    filer, which is exactly when a reversal matters most.
+- source_spec: `_bmad-output/implementation-artifacts/spec-fact-checker.md`
+  summary: Unify table-cell text between Partner B's sample corpus (spaces) and the
+    Librarian (tabs), so column attribution does not degrade on space-joined chunks.
+  evidence: The Fact Checker now matches quotes with whitespace normalized, so the
+    blocker no longer breaks verification (build-log, 2026-10-18). What remains is that a
+    space-joined table cannot have its header parsed, so only the row's first figure is
+    attributed — to the document's own period — and comparative columns there contribute
+    nothing. Review finding #28. One owner should pick a separator for both builders.
 - source_spec: `_bmad-output/implementation-artifacts/spec-report-pdf.md`
   summary: Show Quant basis (formula, FX), confidence_reason, peer status and priced-in evidence in the report findings.
   evidence: Blind review — the report prints eps_pct/usd_m and hit counts without their basis; §4.10 doesn't list them, so it was left out of step 4a.
