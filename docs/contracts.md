@@ -169,6 +169,34 @@ Written by `pharmer/hunters` to `runs/<run_id>/leads.json`; read only by Dedup, 
 - `lead_reasoning_id` in `findings.json` is the earliest-raised reasoning (`-a`, hunter run
   order), not the strongest; scoring ranks a composite row by its strongest reasoning.
 
+### `comparison.json` — Comparison Builder output *(proposed by B, pending A's sign-off)*
+
+Written by `pharmer/comparison.py` to `runs/<run_id>/comparison.json`; read by the Synthesizer
+(as context) and the Exec Report (as the comparison table). Absent when the stage did not run;
+the report then prints "Comparison table not built for this run."
+
+```json
+{
+  "columns": ["Dimension", "Brand A", "Brand B"],
+  "rows": [
+    ["Approved uses", "Indication X", "Indication X, Indication Y"],
+    ["Dosing", "Once weekly", "not disclosed"]
+  ]
+}
+```
+
+*(Values above are illustrative — only the shape is binding.)*
+
+- `columns`: non-empty list of header strings; `rows`: list of lists, one cell per column.
+  A short row is padded with `"not disclosed"`, a long one trimmed.
+- Rows are the five §4.7 dimensions: uses, boxed warnings/safety, dosing/convenience,
+  patent/exclusivity timeline, pricing & gross-to-net exposure.
+- A cell that cannot be sourced is the string `"not disclosed"`, never a guess.
+- The report also reads a list of row objects (`[{"dimension": …, "Brand A": …}]`, keys as
+  columns); any other shape is shown as a visible "unrecognized shape" warning.
+- Open: per-cell citations (label section / Orange or Purple Book chunk ids) are not in this
+  shape yet, so cells print without footnotes; to be added with the Comparison Builder.
+
 ---
 
 ## Contract 3 — API usage log (written by `pharmer/llm.py`, both partners)

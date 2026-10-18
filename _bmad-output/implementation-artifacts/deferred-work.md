@@ -130,3 +130,18 @@ existing entries.
     space-joined table cannot have its header parsed, so only the row's first figure is
     attributed — to the document's own period — and comparative columns there contribute
     nothing. Review finding #28. One owner should pick a separator for both builders.
+- source_spec: `_bmad-output/implementation-artifacts/spec-report-pdf.md`
+  summary: Show Quant basis (formula, FX), confidence_reason, peer status and priced-in evidence in the report findings.
+  evidence: Blind review — the report prints eps_pct/usd_m and hit counts without their basis; §4.10 doesn't list them, so it was left out of step 4a.
+- source_spec: `_bmad-output/implementation-artifacts/spec-report-pdf.md`
+  summary: Footnote comparison cells and cap table width once the Comparison Builder fixes comparison.json's shape.
+  evidence: Blind review — cells print uncited; shape is still a proposal.
+- source_spec: `_bmad-output/implementation-artifacts/spec-report-pdf.md`
+  summary: Add report date, page numbers and an AI-generated/not-investment-advice disclaimer to the PDF.
+  evidence: Blind review — standard research-note pieces missing; not in §4.10's list.
+- source_spec: `_bmad-output/implementation-artifacts/spec-report-pdf.md`
+  summary: Mark footnotes whose page is an inferred ordinal rather than the filing's printed page.
+  evidence: Librarian keeps this in librarian_report.json (not Contract 1); the report prints p.N either way. Needs a contract field.
+- source_spec: `_bmad-output/implementation-artifacts/spec-repo-orchestrator.md`
+  summary: Show pipeline stage skips/degradations (e.g. "Fact Checker not built: confidence unchecked") in the report PDF.
+  evidence: Blind review — they live only in pipeline.json and the console; the report reads no stage status.
