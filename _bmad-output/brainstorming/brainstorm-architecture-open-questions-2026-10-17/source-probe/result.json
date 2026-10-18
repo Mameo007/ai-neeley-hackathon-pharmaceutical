@@ -1,0 +1,1406 @@
+{
+ "companies": [
+  {
+   "company": "Merck",
+   "filer": "10-K/10-Q",
+   "annuals": [
+    "2025-12-31 (2026-02-24)",
+    "2024-12-31 (2025-02-25)"
+   ],
+   "latest_q": "2026-06-30",
+   "prior_yr_q": true,
+   "taxonomy": [
+    "invest",
+    "us-gaap",
+    "ffd",
+    "ecd"
+   ],
+   "currency": [
+    "USD"
+   ],
+   "xbrl_quarterly_2026": true
+  },
+  {
+   "company": "BMS",
+   "filer": "10-K/10-Q",
+   "annuals": [
+    "2025-12-31 (2026-02-11)",
+    "2024-12-31 (2025-02-12)"
+   ],
+   "latest_q": "2026-06-30",
+   "prior_yr_q": true,
+   "taxonomy": [
+    "us-gaap",
+    "ffd"
+   ],
+   "currency": [
+    "USD"
+   ],
+   "xbrl_quarterly_2026": true
+  },
+  {
+   "company": "Pfizer",
+   "filer": "10-K/10-Q",
+   "annuals": [
+    "2025-12-31 (2026-02-26)",
+    "2024-12-31 (2025-02-27)"
+   ],
+   "latest_q": "2026-06-28",
+   "prior_yr_q": false,
+   "taxonomy": [
+    "us-gaap",
+    "srt",
+    "ffd"
+   ],
+   "currency": [
+    "USD"
+   ],
+   "xbrl_quarterly_2026": true
+  },
+  {
+   "company": "Eli Lilly",
+   "filer": "10-K/10-Q",
+   "annuals": [
+    "2025-12-31 (2026-02-12)",
+    "2024-12-31 (2025-02-19)"
+   ],
+   "latest_q": "2026-06-30",
+   "prior_yr_q": true,
+   "taxonomy": [
+    "invest",
+    "us-gaap",
+    "srt",
+    "ffd"
+   ],
+   "currency": [
+    "USD"
+   ],
+   "xbrl_quarterly_2026": true
+  },
+  {
+   "company": "Novo Nordisk",
+   "filer": "20-F/6-K",
+   "annuals": [
+    "2025-12-31 (2026-02-04)",
+    "2024-12-31 (2025-02-05)"
+   ],
+   "6k_count_since_2026": 63,
+   "big_6ks": [
+    "2026-08-04 caq22026.htm 2784KB",
+    "2026-05-06 caq12026.htm 2315KB",
+    "2026-03-27 f6k_032726.htm 3413KB",
+    "2026-02-04 novonordisk_remuneration.htm 4389KB",
+    "2026-02-03 caq42025.htm 2800KB",
+    "2025-11-05 caq32025.htm 2723KB",
+    "2025-10-21 f6k_102125.htm 4337KB",
+    "2025-08-06 caq22025.htm 2910KB"
+   ],
+   "taxonomy": [
+    "ifrs-full",
+    "invest"
+   ],
+   "currency": [
+    "DKK",
+    "EUR"
+   ],
+   "xbrl_quarterly_2026": false
+  },
+  {
+   "company": "AbbVie",
+   "filer": "10-K/10-Q",
+   "annuals": [
+    "2025-12-31 (2026-02-20)",
+    "2024-12-31 (2025-02-14)"
+   ],
+   "latest_q": "2026-06-30",
+   "prior_yr_q": true,
+   "taxonomy": [
+    "us-gaap",
+    "ffd"
+   ],
+   "currency": [
+    "USD"
+   ],
+   "xbrl_quarterly_2026": true
+  },
+  {
+   "company": "J&J",
+   "filer": "10-K/10-Q",
+   "annuals": [
+    "2025-12-28 (2026-02-11)",
+    "2024-12-29 (2025-02-13)"
+   ],
+   "latest_q": "2026-06-28",
+   "prior_yr_q": false,
+   "taxonomy": [
+    "us-gaap"
+   ],
+   "currency": [
+    "USD"
+   ],
+   "xbrl_quarterly_2026": true
+  },
+  {
+   "company": "AstraZeneca",
+   "filer": "20-F/6-K",
+   "annuals": [
+    "2025-12-31 (2026-02-24)",
+    "2024-12-31 (2025-02-18)"
+   ],
+   "6k_count_since_2026": 91,
+   "big_6ks": [
+    "2026-07-27 azn-20260630x6k.htm 13685KB",
+    "2026-04-29 a2999c.htm 1306KB",
+    "2026-03-10 tm268365d1_6k.htm 6341KB",
+    "2026-02-24 tm261135d3_6k.htm 24060KB",
+    "2026-02-10 a3234s.htm 1707KB",
+    "2025-11-06 a4030g.htm 1688KB",
+    "2025-11-03 tm2529889d1_6k.htm 21376KB",
+    "2025-07-29 azn-20250630x6k.htm 12594KB"
+   ],
+   "taxonomy": [
+    "ifrs-full"
+   ],
+   "currency": [
+    "USD"
+   ],
+   "xbrl_quarterly_2026": false
+  },
+  {
+   "company": "Amgen",
+   "filer": "10-K/10-Q",
+   "annuals": [
+    "2025-12-31 (2026-02-13)",
+    "2024-12-31 (2025-02-14)"
+   ],
+   "latest_q": "2026-06-30",
+   "prior_yr_q": true,
+   "taxonomy": [
+    "us-gaap",
+    "ecd"
+   ],
+   "currency": [
+    "USD"
+   ],
+   "xbrl_quarterly_2026": true
+  },
+  {
+   "company": "Gilead",
+   "filer": "10-K/10-Q",
+   "annuals": [
+    "2025-12-31 (2026-02-24)",
+    "2024-12-31 (2025-02-28)"
+   ],
+   "latest_q": "2026-06-30",
+   "prior_yr_q": true,
+   "taxonomy": [
+    "invest",
+    "us-gaap",
+    "ffd"
+   ],
+   "currency": [
+    "USD"
+   ],
+   "xbrl_quarterly_2026": true
+  }
+ ],
+ "rivals": {
+  "ROCHE": "SINOPEC SHANGHAI PETROCHEMICAL CO LTD (SPTJF) files: no periodic reports",
+  "BOEHRINGER": "not an SEC registrant",
+  "NOVARTIS": "NOVARTIS AG (NVS) files: 20-F, 6-K",
+  "SANOFI": "Sanofi (SNY) files: 20-F, 6-K",
+  "TAKEDA": "TAKEDA PHARMACEUTICAL CO LTD (TAK) files: 20-F, 6-K",
+  "REGENERON": "REGENERON PHARMACEUTICALS, INC. (REGN) files: 10-K, 10-Q",
+  "BRIDGEBIO": "BridgeBio Pharma, Inc. (BBIO) files: 10-K, 10-Q",
+  "ALNYLAM": "ALNYLAM PHARMACEUTICALS, INC. (ALNY) files: 10-K, 10-Q",
+  "GSK": "GSK plc (GSK) files: 20-F, 6-K",
+  "SHIONOGI": "not an SEC registrant",
+  "VIIV": "not an SEC registrant"
+ },
+ "products": {
+  "Keytruda": {
+   "maker": "Merck",
+   "orange_book": [],
+   "purple_book": [
+    [
+     "BLA125514",
+     "MSD International Business GmbH"
+    ]
+   ],
+   "dailymed": {
+    "spl_count": 2,
+    "labelers": {
+     "MERCK SHARP & DOHME LLC": [
+      1,
+      [
+       "0006"
+      ]
+     ],
+     "MERCK SHARP & DOHME LLC ": [
+      1,
+      [
+       "0006"
+      ]
+     ]
+    }
+   }
+  },
+  "Januvia": {
+   "maker": "Merck",
+   "orange_book": [
+    [
+     "N021995",
+     "MERCK SHARP AND DOHME LLC"
+    ]
+   ],
+   "purple_book": [],
+   "dailymed": {
+    "spl_count": 11,
+    "labelers": {
+     "A-S MEDICATION SOLUTIONS": [
+      6,
+      [
+       "50090"
+      ]
+     ],
+     "CARDINAL HEALTH 107, LLC": [
+      2,
+      [
+       "55154"
+      ]
+     ],
+     "MERCK SHARP & DOHME LLC": [
+      1,
+      [
+       "0006"
+      ]
+     ],
+     "CLINICAL SOLUTIONS WHOLESALE": [
+      1,
+      [
+       "58118"
+      ]
+     ],
+     "PHYSICIANS TOTAL CARE, INC.": [
+      1,
+      [
+       "54868"
+      ]
+     ]
+    }
+   }
+  },
+  "Lipfendra": {
+   "maker": "Merck",
+   "orange_book": [
+    [
+     "N220848",
+     "MERCK SHARP AND DOHME LLC"
+    ]
+   ],
+   "purple_book": [],
+   "dailymed": {
+    "spl_count": 1,
+    "labelers": {
+     "MERCK SHARP & DOHME LLC": [
+      1,
+      [
+       "0006"
+      ]
+     ]
+    }
+   }
+  },
+  "Opdivo": {
+   "maker": "BMS",
+   "orange_book": [],
+   "purple_book": [
+    [
+     "BLA125554",
+     "Bristol-Myers Squibb Company"
+    ]
+   ],
+   "dailymed": {
+    "spl_count": 2,
+    "labelers": {
+     "E.R. SQUIBB & SONS, L.L.C.": [
+      2,
+      [
+       "0003"
+      ]
+     ]
+    }
+   }
+  },
+  "Eliquis": {
+   "maker": "BMS",
+   "orange_book": [
+    [
+     "N202155",
+     "BRISTOL MYERS SQUIBB CO PHARMACEUTICAL RESEARCH INSTITUTE"
+    ]
+   ],
+   "purple_book": [],
+   "dailymed": {
+    "spl_count": 10,
+    "labelers": {
+     "APHENA PHARMA SOLUTIONS - TENNESSEE, LLC": [
+      1,
+      [
+       "71610"
+      ]
+     ],
+     "REMEDYREPACK INC.": [
+      1,
+      [
+       "70518"
+      ]
+     ],
+     "CARDINAL HEALTH 107, LLC": [
+      1,
+      [
+       "55154"
+      ]
+     ],
+     "E.R. SQUIBB & SONS, L.L.C.": [
+      1,
+      [
+       "0003"
+      ]
+     ],
+     "APHENA PHARMA SOLUTIONS - TENNESSEE, LLC ": [
+      1,
+      [
+       "71610"
+      ]
+     ],
+     "A-S MEDICATION SOLUTIONS": [
+      3,
+      [
+       "50090"
+      ]
+     ],
+     "REDPHARM DRUG, INC.": [
+      1,
+      [
+       "67296"
+      ]
+     ],
+     "PROFICIENT RX LP": [
+      1,
+      [
+       "82804"
+      ]
+     ]
+    }
+   }
+  },
+  "Ibrance": {
+   "maker": "Pfizer",
+   "orange_book": [
+    [
+     "N207103",
+     "PFIZER INC"
+    ],
+    [
+     "N212436",
+     "PFIZER INC"
+    ]
+   ],
+   "purple_book": [],
+   "dailymed": {
+    "spl_count": 3,
+    "labelers": {
+     "U.S. PHARMACEUTICALS": [
+      1,
+      [
+       "63539"
+      ]
+     ],
+     "PFIZER LABORATORIES DIV PFIZER INC": [
+      2,
+      [
+       "0069"
+      ]
+     ]
+    }
+   }
+  },
+  "Vyndaqel": {
+   "maker": "Pfizer",
+   "orange_book": [
+    [
+     "N211996",
+     "FOLDRX PHARMACEUTICALS LLC A WHOLLY OWNED SUB OF PFIZER INC"
+    ]
+   ],
+   "purple_book": [],
+   "dailymed": {
+    "spl_count": 1,
+    "labelers": {
+     "PFIZER LABORATORIES DIV PFIZER INC": [
+      1,
+      [
+       "0069"
+      ]
+     ]
+    }
+   }
+  },
+  "Mounjaro": {
+   "maker": "Lilly",
+   "orange_book": [
+    [
+     "N215866",
+     "ELI LILLY AND CO"
+    ]
+   ],
+   "purple_book": [],
+   "dailymed": {
+    "spl_count": 7,
+    "labelers": {
+     "ELI LILLY AND COMPANY": [
+      1,
+      [
+       "0002"
+      ]
+     ],
+     "A-S MEDICATION SOLUTIONS": [
+      6,
+      [
+       "50090"
+      ]
+     ]
+    }
+   }
+  },
+  "Zepbound": {
+   "maker": "Lilly",
+   "orange_book": [
+    [
+     "N217806",
+     "ELI LILLY AND CO"
+    ]
+   ],
+   "purple_book": [],
+   "dailymed": {
+    "spl_count": 1,
+    "labelers": {
+     "ELI LILLY AND COMPANY": [
+      1,
+      [
+       "0002"
+      ]
+     ]
+    }
+   }
+  },
+  "Trulicity": {
+   "maker": "Lilly",
+   "orange_book": [],
+   "purple_book": [
+    [
+     "BLA125469",
+     "Eli Lilly and Company"
+    ]
+   ],
+   "dailymed": {
+    "spl_count": 7,
+    "labelers": {
+     "ELI LILLY AND COMPANY": [
+      1,
+      [
+       "0002"
+      ]
+     ],
+     "A-S MEDICATION SOLUTIONS": [
+      6,
+      [
+       "50090"
+      ]
+     ]
+    }
+   }
+  },
+  "Verzenio": {
+   "maker": "Lilly",
+   "orange_book": [
+    [
+     "N208716",
+     "ELI LILLY AND CO"
+    ]
+   ],
+   "purple_book": [],
+   "dailymed": {
+    "spl_count": 1,
+    "labelers": {
+     "ELI LILLY AND COMPANY": [
+      1,
+      [
+       "0002"
+      ]
+     ]
+    }
+   }
+  },
+  "Foundayo": {
+   "maker": "Lilly",
+   "orange_book": [
+    [
+     "N220934",
+     "ELI LILLY AND CO"
+    ]
+   ],
+   "purple_book": [],
+   "dailymed": {
+    "spl_count": 1,
+    "labelers": {
+     "ELI LILLY AND COMPANY": [
+      1,
+      [
+       "0002"
+      ]
+     ]
+    }
+   }
+  },
+  "Ozempic": {
+   "maker": "Novo",
+   "orange_book": [
+    [
+     "N209637",
+     "NOVO NORDISK INC"
+    ],
+    [
+     "N213051",
+     "NOVO NORDISK INC"
+    ]
+   ],
+   "purple_book": [],
+   "dailymed": {
+    "spl_count": 7,
+    "labelers": {
+     "NOVO NORDISK PHARMACEUTICAL INDUSTRIES, LP": [
+      2,
+      [
+       "0169"
+      ]
+     ],
+     "A-S MEDICATION SOLUTIONS": [
+      5,
+      [
+       "50090"
+      ]
+     ]
+    }
+   }
+  },
+  "Wegovy": {
+   "maker": "Novo",
+   "orange_book": [
+    [
+     "N215256",
+     "NOVO NORDISK INC"
+    ],
+    [
+     "N218316",
+     "NOVO NORDISK INC"
+    ]
+   ],
+   "purple_book": [],
+   "dailymed": {
+    "spl_count": 2,
+    "labelers": {
+     "NOVO NORDISK PHARMACEUTICAL INDUSTRIES, LP": [
+      1,
+      [
+       "0169"
+      ]
+     ],
+     "A-S MEDICATION SOLUTIONS": [
+      1,
+      [
+       "50090"
+      ]
+     ]
+    }
+   }
+  },
+  "Skyrizi": {
+   "maker": "AbbVie",
+   "orange_book": [],
+   "purple_book": [
+    [
+     "BLA761105",
+     "AbbVie Inc."
+    ],
+    [
+     "BLA761262",
+     "AbbVie Inc."
+    ]
+   ],
+   "dailymed": {
+    "spl_count": 1,
+    "labelers": {
+     "ABBVIE INC.": [
+      1,
+      [
+       "0074"
+      ]
+     ]
+    }
+   }
+  },
+  "Rinvoq": {
+   "maker": "AbbVie",
+   "orange_book": [
+    [
+     "N211675",
+     "ABBVIE INC"
+    ]
+   ],
+   "purple_book": [],
+   "dailymed": {
+    "spl_count": 1,
+    "labelers": {
+     "ABBVIE INC.": [
+      1,
+      [
+       "0074"
+      ]
+     ]
+    }
+   }
+  },
+  "Humira": {
+   "maker": "AbbVie",
+   "orange_book": [],
+   "purple_book": [
+    [
+     "BLA125057",
+     "AbbVie Inc."
+    ]
+   ],
+   "dailymed": {
+    "spl_count": 3,
+    "labelers": {
+     "CORDAVIS LIMITED": [
+      1,
+      [
+       "83457"
+      ]
+     ],
+     "ABBVIE INC.": [
+      1,
+      [
+       "0074"
+      ]
+     ],
+     "A-S MEDICATION SOLUTIONS": [
+      1,
+      [
+       "50090"
+      ]
+     ]
+    }
+   }
+  },
+  "Stelara": {
+   "maker": "J&J",
+   "orange_book": [],
+   "purple_book": [
+    [
+     "BLA125261",
+     "Janssen Biotech, Inc."
+    ],
+    [
+     "BLA761044",
+     "Janssen Biotech, Inc."
+    ]
+   ],
+   "dailymed": {
+    "spl_count": 1,
+    "labelers": {
+     "JANSSEN BIOTECH, INC.": [
+      1,
+      [
+       "57894"
+      ]
+     ]
+    }
+   }
+  },
+  "Tremfya": {
+   "maker": "J&J",
+   "orange_book": [],
+   "purple_book": [
+    [
+     "BLA761061",
+     "Janssen Biotech, Inc."
+    ]
+   ],
+   "dailymed": {
+    "spl_count": 1,
+    "labelers": {
+     "JANSSEN BIOTECH, INC.": [
+      1,
+      [
+       "57894"
+      ]
+     ]
+    }
+   }
+  },
+  "Darzalex": {
+   "maker": "J&J",
+   "orange_book": [],
+   "purple_book": [
+    [
+     "BLA761036",
+     "Janssen Biotech, Inc."
+    ]
+   ],
+   "dailymed": {
+    "spl_count": 2,
+    "labelers": {
+     "JANSSEN BIOTECH, INC.": [
+      2,
+      [
+       "57894"
+      ]
+     ]
+    }
+   }
+  },
+  "Xarelto": {
+   "maker": "J&J",
+   "orange_book": [
+    [
+     "N022406",
+     "JANSSEN PHARMACEUTICALS INC"
+    ],
+    [
+     "N215859",
+     "JANSSEN PHARMACEUTICALS INC"
+    ]
+   ],
+   "purple_book": [],
+   "dailymed": {
+    "spl_count": 7,
+    "labelers": {
+     "JANSSEN PHARMACEUTICALS, INC.": [
+      1,
+      [
+       "50458"
+      ]
+     ],
+     "CARDINAL HEALTH 107, LLC": [
+      1,
+      [
+       "55154"
+      ]
+     ],
+     "A-S MEDICATION SOLUTIONS": [
+      4,
+      [
+       "50090"
+      ]
+     ],
+     "APHENA PHARMA SOLUTIONS - TENNESSEE, LLC": [
+      1,
+      [
+       "71610"
+      ]
+     ]
+    }
+   }
+  },
+  "Rybrevant": {
+   "maker": "J&J",
+   "orange_book": [],
+   "purple_book": [
+    [
+     "BLA761210",
+     "Janssen Biotech, Inc."
+    ]
+   ],
+   "dailymed": {
+    "spl_count": 2,
+    "labelers": {
+     "JANSSEN BIOTECH, INC.": [
+      2,
+      [
+       "57894"
+      ]
+     ]
+    }
+   }
+  },
+  "Lazcluze": {
+   "maker": "J&J",
+   "orange_book": [
+    [
+     "N219008",
+     "JANSSEN BIOTECH INC"
+    ]
+   ],
+   "purple_book": [],
+   "dailymed": {
+    "spl_count": 1,
+    "labelers": {
+     "JANSSEN BIOTECH, INC.": [
+      1,
+      [
+       "57894"
+      ]
+     ]
+    }
+   }
+  },
+  "Tagrisso": {
+   "maker": "AZ",
+   "orange_book": [
+    [
+     "N208065",
+     "ASTRAZENECA PHARMACEUTICALS LP"
+    ]
+   ],
+   "purple_book": [],
+   "dailymed": {
+    "spl_count": 1,
+    "labelers": {
+     "ASTRAZENECA PHARMACEUTICALS LP": [
+      1,
+      [
+       "0310"
+      ]
+     ]
+    }
+   }
+  },
+  "Farxiga": {
+   "maker": "AZ",
+   "orange_book": [
+    [
+     "N202293",
+     "ASTRAZENECA AB"
+    ]
+   ],
+   "purple_book": [],
+   "dailymed": {
+    "spl_count": 3,
+    "labelers": {
+     "REMEDYREPACK INC.": [
+      1,
+      [
+       "70518"
+      ]
+     ],
+     "ASTRAZENECA PHARMACEUTICALS LP": [
+      1,
+      [
+       "0310"
+      ]
+     ],
+     "A-S MEDICATION SOLUTIONS": [
+      1,
+      [
+       "50090"
+      ]
+     ]
+    }
+   }
+  },
+  "Imfinzi": {
+   "maker": "AZ",
+   "orange_book": [],
+   "purple_book": [
+    [
+     "BLA761069",
+     "AstraZeneca UK Ltd"
+    ]
+   ],
+   "dailymed": {
+    "spl_count": 1,
+    "labelers": {
+     "ASTRAZENECA PHARMACEUTICALS LP": [
+      1,
+      [
+       "0310"
+      ]
+     ]
+    }
+   }
+  },
+  "Repatha": {
+   "maker": "Amgen",
+   "orange_book": [],
+   "purple_book": [
+    [
+     "BLA125522",
+     "Amgen Inc."
+    ]
+   ],
+   "dailymed": {
+    "spl_count": 1,
+    "labelers": {
+     "AMGEN USA INC.": [
+      1,
+      [
+       "72511"
+      ]
+     ]
+    }
+   }
+  },
+  "Enbrel": {
+   "maker": "Amgen",
+   "orange_book": [],
+   "purple_book": [
+    [
+     "BLA103795",
+     "Immunex Corporation"
+    ]
+   ],
+   "dailymed": {
+    "spl_count": 3,
+    "labelers": {
+     "IMMUNEX CORPORATION": [
+      1,
+      [
+       "58406"
+      ]
+     ],
+     "A-S MEDICATION SOLUTIONS": [
+      2,
+      [
+       "50090"
+      ]
+     ]
+    }
+   }
+  },
+  "Amjevita": {
+   "maker": "Amgen",
+   "orange_book": [],
+   "purple_book": [
+    [
+     "BLA761024",
+     "Amgen Inc."
+    ]
+   ],
+   "dailymed": {
+    "spl_count": 3,
+    "labelers": {
+     "AMGEN, INC": [
+      1,
+      [
+       "55513"
+      ]
+     ],
+     "AMGEN USA INC.": [
+      1,
+      [
+       "72511"
+      ]
+     ],
+     "NUVAILA LIMITED": [
+      1,
+      [
+       "84612"
+      ]
+     ]
+    }
+   }
+  },
+  "Wezlana": {
+   "maker": "Amgen",
+   "orange_book": [],
+   "purple_book": [
+    [
+     "BLA761285",
+     "Amgen Inc."
+    ],
+    [
+     "BLA761331",
+     "Amgen Inc."
+    ]
+   ],
+   "dailymed": {
+    "spl_count": 1,
+    "labelers": {
+     "NUVAILA LIMITED": [
+      1,
+      [
+       "84612"
+      ]
+     ]
+    }
+   }
+  },
+  "Biktarvy": {
+   "maker": "Gilead",
+   "orange_book": [
+    [
+     "N210251",
+     "GILEAD SCIENCES INC"
+    ]
+   ],
+   "purple_book": [],
+   "dailymed": {
+    "spl_count": 2,
+    "labelers": {
+     "GILEAD SCIENCES, INC.": [
+      1,
+      [
+       "61958"
+      ]
+     ],
+     "A-S MEDICATION SOLUTIONS": [
+      1,
+      [
+       "50090"
+      ]
+     ]
+    }
+   }
+  },
+  "Yeztugo": {
+   "maker": "Gilead",
+   "orange_book": [
+    [
+     "N220018",
+     "GILEAD SCIENCES INC"
+    ],
+    [
+     "N220020",
+     "GILEAD SCIENCES INC"
+    ]
+   ],
+   "purple_book": [],
+   "dailymed": {
+    "spl_count": 1,
+    "labelers": {
+     "GILEAD SCIENCES, INC.": [
+      1,
+      [
+       "61958"
+      ]
+     ]
+    }
+   }
+  },
+  "Tecentriq": {
+   "maker": "Roche",
+   "orange_book": [],
+   "purple_book": [
+    [
+     "BLA761034",
+     "Genentech, Inc."
+    ]
+   ],
+   "dailymed": {
+    "spl_count": 2,
+    "labelers": {
+     "GENENTECH, INC.": [
+      2,
+      [
+       "50242"
+      ]
+     ]
+    }
+   }
+  },
+  "Jardiance": {
+   "maker": "BI",
+   "orange_book": [
+    [
+     "N204629",
+     "BOEHRINGER INGELHEIM PHARMACEUTICALS INC"
+    ]
+   ],
+   "purple_book": [],
+   "dailymed": {
+    "spl_count": 9,
+    "labelers": {
+     "REDPHARM DRUG": [
+      1,
+      [
+       "67296"
+      ]
+     ],
+     "APHENA PHARMA SOLUTIONS - TENNESSEE, LLC ": [
+      1,
+      [
+       "71610"
+      ]
+     ],
+     "CARDINAL HEALTH 107, LLC": [
+      1,
+      [
+       "55154"
+      ]
+     ],
+     "BOEHRINGER INGELHEIM PHARMACEUTICALS, INC.": [
+      1,
+      [
+       "0597"
+      ]
+     ],
+     "APHENA PHARMA SOLUTIONS - TENNESSEE, LLC": [
+      1,
+      [
+       "71610"
+      ]
+     ],
+     "A-S MEDICATION SOLUTIONS": [
+      4,
+      [
+       "50090"
+      ]
+     ]
+    }
+   }
+  },
+  "Kisqali": {
+   "maker": "Novartis",
+   "orange_book": [
+    [
+     "N209092",
+     "NOVARTIS PHARMACEUTICALS CORP"
+    ]
+   ],
+   "purple_book": [],
+   "dailymed": {
+    "spl_count": 1,
+    "labelers": {
+     "NOVARTIS PHARMACEUTICALS CORPORATION": [
+      1,
+      [
+       "0078"
+      ]
+     ]
+    }
+   }
+  },
+  "Cosentyx": {
+   "maker": "Novartis",
+   "orange_book": [],
+   "purple_book": [
+    [
+     "BLA125504",
+     "Novartis Pharmaceuticals Corporation"
+    ],
+    [
+     "BLA761349",
+     "Novartis Pharmaceuticals Corporation"
+    ]
+   ],
+   "dailymed": {
+    "spl_count": 1,
+    "labelers": {
+     "NOVARTIS PHARMACEUTICALS CORPORATION": [
+      1,
+      [
+       "0078"
+      ]
+     ]
+    }
+   }
+  },
+  "Leqvio": {
+   "maker": "Novartis",
+   "orange_book": [
+    [
+     "N214012",
+     "NOVARTIS PHARMACEUTICALS CORP"
+    ]
+   ],
+   "purple_book": [],
+   "dailymed": {
+    "spl_count": 1,
+    "labelers": {
+     "NOVARTIS PHARMACEUTICALS CORPORATION": [
+      1,
+      [
+       "0078"
+      ]
+     ]
+    }
+   }
+  },
+  "Attruby": {
+   "maker": "BridgeBio",
+   "orange_book": [
+    [
+     "N216540",
+     "BRIDGEBIO PHARMA INC"
+    ]
+   ],
+   "purple_book": [],
+   "dailymed": {
+    "spl_count": 1,
+    "labelers": {
+     "BRIDGEBIO PHARMA, INC.": [
+      1,
+      [
+       "82228"
+      ]
+     ]
+    }
+   }
+  },
+  "Amvuttra": {
+   "maker": "Alnylam",
+   "orange_book": [
+    [
+     "N215515",
+     "ALNYLAM PHARMACEUTICALS INC"
+    ]
+   ],
+   "purple_book": [],
+   "dailymed": {
+    "spl_count": 1,
+    "labelers": {
+     "ALNYLAM PHARMACEUTICALS, INC.": [
+      1,
+      [
+       "71336"
+      ]
+     ]
+    }
+   }
+  },
+  "Entyvio": {
+   "maker": "Takeda",
+   "orange_book": [],
+   "purple_book": [
+    [
+     "BLA125476",
+     "Takeda Pharmaceuticals U.S.A., Inc."
+    ],
+    [
+     "BLA761133",
+     "Takeda Pharmaceuticals U.S.A., Inc."
+    ]
+   ],
+   "dailymed": {
+    "spl_count": 1,
+    "labelers": {
+     "TAKEDA PHARMACEUTICALS AMERICA, INC.": [
+      1,
+      [
+       "64764"
+      ]
+     ]
+    }
+   }
+  },
+  "Sarclisa": {
+   "maker": "Sanofi",
+   "orange_book": [],
+   "purple_book": [
+    [
+     "BLA761113",
+     "Sanofi-Aventis U.S. LLC"
+    ]
+   ],
+   "dailymed": {
+    "spl_count": 2,
+    "labelers": {
+     "SANOFI-AVENTIS U.S. LLC": [
+      2,
+      [
+       "0024"
+      ]
+     ]
+    }
+   }
+  },
+  "Praluent": {
+   "maker": "Regeneron",
+   "orange_book": [],
+   "purple_book": [
+    [
+     "BLA125559",
+     "Regeneron Pharmaceuticals, Inc."
+    ]
+   ],
+   "dailymed": {
+    "spl_count": 2,
+    "labelers": {
+     "SANOFI-AVENTIS U.S. LLC": [
+      1,
+      [
+       "0024"
+      ]
+     ],
+     "REGENERON PHARMACEUTICALS, INC.": [
+      1,
+      [
+       "61755"
+      ]
+     ]
+    }
+   }
+  },
+  "Dovato": {
+   "maker": "ViiV",
+   "orange_book": [
+    [
+     "N211994",
+     "VIIV HEALTHCARE CO"
+    ]
+   ],
+   "purple_book": [],
+   "dailymed": {
+    "spl_count": 1,
+    "labelers": {
+     "VIIV HEALTHCARE COMPANY": [
+      1,
+      [
+       "49702"
+      ]
+     ]
+    }
+   }
+  },
+  "Cabenuva": {
+   "maker": "ViiV",
+   "orange_book": [],
+   "purple_book": [],
+   "dailymed": {
+    "spl_count": 1,
+    "labelers": {
+     "VIIV HEALTHCARE COMPANY": [
+      1,
+      [
+       "49702"
+      ]
+     ]
+    }
+   }
+  },
+  "Apretude": {
+   "maker": "ViiV",
+   "orange_book": [
+    [
+     "N215499",
+     "VIIV HEALTHCARE CO"
+    ]
+   ],
+   "purple_book": [],
+   "dailymed": {
+    "spl_count": 1,
+    "labelers": {
+     "VIIV HEALTHCARE COMPANY": [
+      1,
+      [
+       "49702"
+      ]
+     ]
+    }
+   }
+  }
+ }
+}
