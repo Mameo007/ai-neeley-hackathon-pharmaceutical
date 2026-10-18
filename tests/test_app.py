@@ -6,6 +6,7 @@ Run: .venv/bin/python -m unittest tests.test_app
 import json
 import shutil
 import tempfile
+import tomllib
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -142,19 +143,48 @@ class ProductListTests(unittest.TestCase):
                 self.assertIn(entry["rivals"], text)
 
 
+class ThemeTests(unittest.TestCase):
+    """The dark "analyst terminal" theme (docs/ui-plan.md step 1) is set in the repo's config."""
+
+    def test_dark_theme_with_amber_and_green(self):
+        config = tomllib.loads((REPO_ROOT / ".streamlit" / "config.toml").read_text())["theme"]
+        self.assertEqual((config["base"], config["primaryColor"], config["greenColor"]),
+                         ("dark", "#ffb020", "#35d07f"))
+        self.assertIn("monospace", config["codeFont"])
+
+
 class PageTests(AppTestCase):
-    def page(self, run=None):
+    def page(self, run=None, query_run=None):
         at = AppTest.from_file(str(REPO_ROOT / "app.py"), default_timeout=30)
         if run is not None:
             at.session_state["run"] = run
+        if query_run is not None:
+            at.query_params["run"] = query_run
         return at.run()
 
     def test_new_run_form(self):
         at = self.page()
         self.assertFalse(at.exception)
         self.assertEqual(at.title[0].value, "PHARMER RESEARCH")
+        self.assertEqual(len(at.sidebar.children), 0)  # the run picker left the sidebar
+        self.assertEqual(at.expander[0].label, "Past runs (0)")
         self.assertEqual(at.button[0].label, "Start run")
         self.assertEqual(len(at.toggle), 0)  # first company (ABBV) has no prebuilt corpus
+
+    def test_query_param_opens_a_run_from_past_runs(self):
+        self.make_run("NVO-20261018-0100", "awaiting_human", "x")
+        at = self.page(query_run="NVO-20261018-0100")
+        self.assertFalse(at.exception)
+        self.assertEqual(at.expander[0].label, "Past runs (1)")
+        self.assertEqual(at.selectbox(key="run").value, "NVO-20261018-0100")
+        self.assertEqual(at.radio[0].value, "F-003")
+
+    def test_new_run_button_returns_to_the_form(self):
+        self.make_run("NVO-20261018-0100", "awaiting_human", "x")
+        at = self.page("NVO-20261018-0100")
+        next(b for b in at.button if b.label == "➕ New run").click().run()
+        self.assertFalse(at.exception)
+        self.assertEqual(at.subheader[0].value, "Start a new run")
 
     def test_paused_run_shows_review_and_pick(self):
         self.make_run("NVO-20261018-0100", "awaiting_human", "x")
@@ -218,6 +248,16 @@ class PageTests(AppTestCase):
                     mock.patch.object(app, "launch"):
                 at.button[0].click().run()
             self.assertEqual(prepare.call_args.kwargs["corpus"], expected)
+
+    def test_running_run_shows_progress(self):
+        run_dir = self.make_run("NVO-20261018-0100", "running", "x",
+                                stages={"hunters": {"status": "running", "seconds": 1.0,
+                                                    "error": None}})
+        with mock.patch.object(app, "live_runs", return_value=frozenset({str(run_dir)})):
+            at = self.page("NVO-20261018-0100")
+        self.assertFalse(at.exception)
+        self.assertIn("Working", at.info[0].value)
+        self.assertEqual(len(at.radio), 0)
 
     def test_interrupted_run_offers_the_retry_mark(self):
         self.make_run("NVO-20261018-0100", "running", "x")
