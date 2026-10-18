@@ -1,0 +1,47 @@
+[
+  {
+    "doc_id": "NVO-6K-2026Q2",
+    "company": "Novo Nordisk",
+    "ticker": "NVO",
+    "doc_type": "6-K",
+    "fiscal_period": "Q2 2026",
+    "period_end": "2026-06-30",
+    "filed_date": "2026-08-04",
+    "url": "https://www.sec.gov/Archives/edgar/data/353278/000035327826000023/caq22026.htm",
+    "accession": "0000353278-26-000023",
+    "source": "pre-collected",
+    "collected_date": "2026-10-18",
+    "application_no": null,
+    "labeler_code": null
+  },
+  {
+    "doc_id": "NVO-6K-2025Q2",
+    "company": "Novo Nordisk",
+    "ticker": "NVO",
+    "doc_type": "6-K",
+    "fiscal_period": "Q2 2025",
+    "period_end": "2025-06-30",
+    "filed_date": "2025-08-06",
+    "url": "https://www.sec.gov/Archives/edgar/data/353278/000162828025038087/caq22025.htm",
+    "accession": "0001628280-25-038087",
+    "source": "pre-collected",
+    "collected_date": "2026-10-18",
+    "application_no": null,
+    "labeler_code": null
+  },
+  {
+    "doc_id": "NVO-XBRL",
+    "company": "Novo Nordisk",
+    "ticker": "NVO",
+    "doc_type": "xbrl",
+    "fiscal_period": "FY2025",
+    "period_end": "2025-12-31",
+    "filed_date": "2026-02-04",
+    "url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0000353278.json",
+    "accession": null,
+    "source": "pre-collected",
+    "collected_date": "2026-10-18",
+    "application_no": null,
+    "labeler_code": null
+  }
+]
