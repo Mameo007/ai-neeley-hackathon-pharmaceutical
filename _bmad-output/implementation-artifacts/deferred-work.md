@@ -148,3 +148,6 @@ existing entries.
 - source_spec: `_bmad-output/implementation-artifacts/spec-comparison-builder.md`
   summary: Bundle Orange Book / Purple Book entries so the Patent / exclusivity row can be sourced.
   evidence: Labels carry no exclusivity dates and 6-Ks rarely name patent expiry; the row will be mostly "not disclosed" until those docs exist (Librarian, Partner A).
+- source_spec: none
+  summary: Peer Agent, Peer Contraster and Call Decoder hunters, Priced-In Detector, Orange/Purple Book fetch, and report polish (skipped-stage notes in PDF, comparison footnotes, UI rivals field) deferred past the hackathon deadline.
+  evidence: Human scope decision 2026-10-18; see docs/architecture.md §9.5.
