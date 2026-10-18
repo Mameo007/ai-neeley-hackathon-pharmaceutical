@@ -7,6 +7,7 @@ never blocks; the page reads progress from runs/<run_id>/pipeline.json. The help
 Run: .venv/bin/streamlit run app.py
 """
 import asyncio
+import html
 import json
 import logging
 import re
@@ -21,6 +22,7 @@ from pharmer import synthesizer as syn
 
 REPO_ROOT = Path(__file__).resolve().parent
 PRODUCTS_PATH = REPO_ROOT / "data" / "products.json"  # from the case appendix, hand-curated
+THREADS_PATH = REPO_ROOT / "data" / "starter_threads.json"  # appendix starter threads, verbatim
 SAMPLE_DIR = REPO_ROOT / "data" / "sample"
 NOT_CONFIRMED = "Not confirmed"
 NEW_RUN = ""  # the run picker's "start a new run" entry
@@ -47,6 +49,23 @@ h2, h3 { letter-spacing: -0.3px; }
 [data-testid="stMetricValue"] { font-family: var(--pharmer-mono); }
 [data-testid^="stBaseButton-primary"], [data-testid^="stBaseButton-primary"] p {
   color: #111 !important; font-weight: 700; }
+/* Company tiles: the tile's own button is stretched invisibly over it, so the whole tile clicks. */
+[class*="st-key-tile-"] { position: relative; min-height: 236px; background: #11161d;
+  border-radius: 12px; }
+[class*="st-key-tile-"]:hover { border-color: #3a4556; }
+[class*="st-key-tile-"]:has(button:focus-visible) { outline: 2px solid #ffb020; }
+[class*="st-key-pick-"] { position: absolute !important; inset: 0; z-index: 2; }
+[class*="st-key-pick-"] [data-testid="stButton"], [class*="st-key-pick-"] button {
+  width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+.pharmer-tile { display: flex; flex-direction: column; gap: 10px; }
+.pharmer-tile .row { display: flex; justify-content: space-between; align-items: center; }
+.pharmer-tile .name { font-size: 1.15rem; font-weight: 650; color: #e8eaed; }
+.pharmer-tile .thread { color: #8a94a3; font-size: 0.9rem; line-height: 1.45; }
+.pharmer-ticker { font-family: var(--pharmer-mono); font-size: 0.8rem; font-weight: 700;
+  letter-spacing: 1px; background: #1d2632; color: #ffb020; border-radius: 5px; padding: 3px 7px; }
+.pharmer-pill { font-family: var(--pharmer-mono); font-size: 0.72rem; border-radius: 99px;
+  padding: 3px 9px; background: rgba(53, 208, 127, .14); color: #35d07f; }
+.pharmer-sub { color: #8a94a3; font-size: 1.05rem; margin-top: -0.6rem; }
 </style>"""
 
 
@@ -76,6 +95,36 @@ def load_products(path=PRODUCTS_PATH):
     """{ticker: [{"product", "rivals"}]} from data/products.json; {} if the file is missing."""
     data = syn.read_json_or_none(path)
     return data if isinstance(data, dict) else {}
+
+
+def load_threads(path=THREADS_PATH):
+    """{ticker: starter thread} from data/starter_threads.json; {} if the file is missing."""
+    data = syn.read_json_or_none(path)
+    return data if isinstance(data, dict) else {}
+
+
+def company_tiles(threads=None, sample_dir=SAMPLE_DIR):
+    """One tile per shortlist company, in librarian.CIKS order:
+    [{"ticker", "name", "thread", "ready"}]; "ready" = a prebuilt corpus is on disk."""
+    threads = load_threads() if threads is None else threads
+    return [{"ticker": t, "name": name, "thread": threads.get(t, ""),
+             "ready": prebuilt_corpus(t, sample_dir) is not None}
+            for t, (_, name) in librarian.CIKS.items()]
+
+
+def default_company(tiles):
+    """The tile selected on first load: the first with filings ready (the company the demo
+    uses), else the first tile."""
+    return next((t["ticker"] for t in tiles if t["ready"]), tiles[0]["ticker"])
+
+
+def tile_html(tile):
+    """A tile's text as HTML (every value escaped; the click target is a separate button)."""
+    pill = '<span class="pharmer-pill">● filings ready</span>' if tile["ready"] else ""
+    return (f'<div class="pharmer-tile"><div class="row"><span class="pharmer-ticker">'
+            f'{html.escape(tile["ticker"])}</span>{pill}</div>'
+            f'<div class="name">{html.escape(tile["name"])}</div>'
+            f'<div class="thread">{html.escape(tile["thread"])}</div></div>')
 
 
 def product_options(ticker, products=None):
@@ -230,20 +279,41 @@ def past_runs(runs):
         return chosen
 
 
+def company_grid(tiles):
+    """The 5-wide tile grid; returns the selected ticker (kept in session_state["company"])."""
+    if st.session_state.get("company") not in {t["ticker"] for t in tiles}:
+        st.session_state["company"] = default_company(tiles)
+    chosen = st.session_state["company"]
+    st.html(f"<style>.st-key-tile-{chosen} {{ border: 2px solid #ffb020 !important; "
+            "background: #17140c !important; box-shadow: 0 0 0 6px rgba(255,176,32,.08); }"
+            "</style>")
+    for start in range(0, len(tiles), 5):
+        for col, tile in zip(st.columns(5), tiles[start:start + 5]):
+            with col, st.container(border=True, key=f"tile-{tile['ticker']}"):
+                st.html(tile_html(tile))
+                label = f"{tile['name']} (selected)" if tile["ticker"] == chosen else tile["name"]
+                if st.button(label, key=f"pick-{tile['ticker']}"):
+                    st.session_state["company"] = tile["ticker"]
+                    st.rerun()
+    return chosen
+
+
 def new_run_form():
-    st.subheader("Start a new run")
-    tickers = sorted(librarian.CIKS)
-    ticker = st.selectbox("Company", tickers,
-                          format_func=lambda t: f"{librarian.CIKS[t][1]} ({t})")
+    st.header("Pick a company. Our agents read its filings.")
+    st.html('<div class="pharmer-sub">Annual and quarterly reports from SEC EDGAR: every '
+            "finding comes with its source.</div>")
+    tiles = company_tiles()
+    ticker = company_grid(tiles)
+    name = librarian.CIKS[ticker][1]
     corpus = prebuilt_corpus(ticker)
     use_prebuilt = False
     if corpus is not None:
-        use_prebuilt = st.toggle("Use prebuilt corpus", value=False,
-                                 help=f"Copy {corpus.relative_to(REPO_ROOT)} instead of "
-                                      "fetching filings from SEC (offline / demo fallback).")
-    st.caption("Runs corpus → hunters → Dedup → verification → scoring, "
-               "then stops for your pick.")
-    if st.button("Start run", type="primary"):
+        use_prebuilt = st.toggle("Use the prebuilt filings", value=False,
+                                 help="Use filings already downloaded instead of fetching "
+                                      "them from SEC. Works offline.")
+    clicked = st.button(f"Find the needle in {name} →", type="primary")
+    st.caption("Takes a few minutes. You pick the final finding.")
+    if clicked:
         corpus = corpus if use_prebuilt else None
         try:
             run_dir = orchestrator.prepare_run(ticker, corpus=corpus)
