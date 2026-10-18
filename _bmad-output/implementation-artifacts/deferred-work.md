@@ -19,3 +19,7 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-dedup-judge.md`
   summary: When leads in one anchor group cite different anchor values/units, Dedup only logs a warning; nothing in findings.json tells the Fact Checker, and a later reasoning can sit under a value none of its quotes contain.
   evidence: build_finding keeps the earliest anchor; needs either a value in the grouping key or a contract flag (e.g. value_mismatch), which needs Partner A.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-scoring-selection.md`
+  summary: Give the Peer Agent a first-pass top-~10 from scoring without selection side effects (or have the orchestrator run scoring -> peer -> scoring).
+  evidence: §4.6 runs Peer on the first-pass top ~10; scoring.apply marks selected/recommended; ranked_units already exposes the order.
