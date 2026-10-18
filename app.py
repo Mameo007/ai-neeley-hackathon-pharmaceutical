@@ -34,6 +34,40 @@ STAGE_COLORS = {"ok": "green", "running": "blue", "skipped": "gray", "degraded":
 PHASE_LABELS = {"running": "running", "awaiting_human": "needs your pick", "done": "done",
                 "failed": "failed", "interrupted": "interrupted"}
 
+# pipeline.json stage name -> (group, agent, one-line job), in run order. Stages that share an
+# agent name share one card (scoring runs twice).
+STAGE_AGENTS = {
+    "corpus": ("Collect", "Librarian", "Pulls the company's filings into one source library."),
+    "hunters": ("Hunt", "The hunters", "Six specialists read every page for what changed."),
+    "dedup": ("Check", "Dedup", "Merges findings that say the same thing."),
+    "fact_checker": ("Check", "Fact Checker",
+                     "Matches every quote word for word against the filing."),
+    "quant": ("Check", "Quant", "Puts a dollar and earnings-per-share number on each finding."),
+    "priced_in": ("Check", "Priced-In Detector",
+                  "Checks whether Wall Street is already talking about it."),
+    "scoring": ("Rank", "Scoring", "Ranks findings by impact and by how hidden they are."),
+    "peer": ("Check", "Peer Agent", "Compares each finding with rivals' filings."),
+    "scoring_after_peer": ("Rank", "Scoring",
+                           "Ranks findings by impact and by how hidden they are."),
+    "comparison": ("After your pick", "Comparison Builder",
+                   "Lines your product up against its rivals."),
+    "synthesizer": ("After your pick", "Synthesizer", "Writes the verdict on what limits growth."),
+    "ceo_move": ("After your pick", "CEO Move", "Turns the needle into one move for the CEO."),
+    "report": ("After your pick", "Report", "Writes the PDF, every number footnoted."),
+}
+FINISH_STAGE_NAMES = ("comparison", "synthesizer", "ceo_move", "report")
+HUNTER_NAMES = {"redliner": "Redliner", "channel_checker": "Channel Checker",
+                "footnote_miner": "Footnote Miner", "gross_to_net": "Gross-to-Net",
+                "table_archaeologist": "Table Archaeologist", "label_lawyer": "Label Lawyer"}
+CARD_STATES = {"waiting": "waiting", "running": "working", "ok": "✓", "skipped": "not built",
+               "degraded": "problem", "failed": "error", "stopped": "stopped",
+               "not_reached": "not reached"}
+CARD_PROBLEMS = {"skipped": "Not built yet, so this step was skipped.",
+                 "stopped": "Stopped mid-step when the job ended (e.g. the app restarted).",
+                 "not_reached": "The run ended before this step.",
+                 "degraded": "Finished, but with a problem. See Details below.",
+                 "failed": "Stopped with an error. See Details below."}
+
 # The theme's colours are in .streamlit/config.toml; this adds what the theme can't set: the
 # amber monospace masthead, the header bar, panel-coloured cards and monospace numbers.
 CSS = """<style>
@@ -66,6 +100,40 @@ h2, h3 { letter-spacing: -0.3px; }
 .pharmer-pill { font-family: var(--pharmer-mono); font-size: 0.72rem; border-radius: 99px;
   padding: 3px 9px; background: rgba(53, 208, 127, .14); color: #35d07f; }
 .pharmer-sub { color: #8a94a3; font-size: 1.05rem; margin-top: -0.6rem; }
+/* Agent cards */
+.pharmer-run-head { display: flex; align-items: center; gap: 14px; }
+.pharmer-run-head .title { font-size: 1.9rem; font-weight: 650; letter-spacing: -0.5px; }
+.pharmer-bar { height: 6px; border-radius: 99px; background: #232b37; margin: 14px 0 18px; }
+.pharmer-bar div { height: 100%; border-radius: 99px;
+  background: linear-gradient(90deg, #35d07f, #ffb020); }
+.pharmer-cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+.pharmer-card { background: #11161d; border: 1px solid #232b37; border-radius: 12px;
+  padding: 16px 18px; display: flex; flex-direction: column; gap: 6px; }
+.pharmer-card .group { font-family: var(--pharmer-mono); font-size: 0.72rem; letter-spacing: 2px;
+  text-transform: uppercase; color: #8a94a3; }
+.pharmer-card .head { display: flex; justify-content: space-between; align-items: baseline; }
+.pharmer-card .name { font-size: 1.1rem; font-weight: 650; }
+.pharmer-card .state { font-family: var(--pharmer-mono); font-size: 0.8rem; color: #8a94a3; }
+.pharmer-card .job { color: #b4bcc8; font-size: 0.9rem; line-height: 1.4; }
+.pharmer-card .who { color: #8a94a3; font-size: 0.8rem; }
+.pharmer-card .found { font-family: var(--pharmer-mono); font-size: 0.8rem; color: #35d07f; }
+.pharmer-card .problem { font-size: 0.85rem; color: #ff5d5d; }
+.pharmer-card.waiting, .pharmer-card.skipped, .pharmer-card.not_reached { opacity: 0.45; }
+.pharmer-card.skipped .problem, .pharmer-card.not_reached .problem { color: #8a94a3; }
+.pharmer-card.stopped { border-color: #ff5d5d; }
+.pharmer-card.stopped .state { color: #ff5d5d; }
+@media (max-width: 1000px) { .pharmer-cards { grid-template-columns: repeat(2, 1fr); } }
+.pharmer-card.ok .state { color: #35d07f; font-size: 1.1rem; }
+.pharmer-card.running { border: 2px solid #ffb020; background: #17140c;
+  animation: pharmer-pulse 1.6s ease-in-out infinite; }
+.pharmer-card.running .state { color: #ffb020; }
+.pharmer-card.degraded, .pharmer-card.failed { border-color: #ff5d5d; }
+.pharmer-card.degraded .state, .pharmer-card.failed .state { color: #ff5d5d; }
+@keyframes pharmer-pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(255,176,32,.25); }
+  50% { box-shadow: 0 0 0 7px rgba(255,176,32,0); } }
+.pharmer-after { margin-top: 14px; color: #b4bcc8; font-size: 0.95rem; }
+.pharmer-after span { font-family: var(--pharmer-mono); font-size: 0.8rem; color: #8a94a3;
+  background: #1b222c; border-radius: 99px; padding: 3px 10px; margin-right: 8px; }
 </style>"""
 
 
@@ -209,6 +277,117 @@ def default_product(run_dir, options):
     return product if product in options else NOT_CONFIRMED
 
 
+def _card_status(statuses, live=True):
+    """One card's status from its stages' pipeline.json statuses (None = not started yet).
+    With no live job, a stage left "running" stopped and a stage never started was not reached."""
+    for bad in ("failed", "degraded"):
+        if bad in statuses:
+            return bad
+    if "running" in statuses:
+        return "running" if live else "stopped"
+    if all(s is None for s in statuses):
+        return "waiting" if live else "not_reached"
+    if all(s == "skipped" for s in statuses):
+        return "skipped"
+    return "ok"  # also between Scoring's two passes: the first one is done
+
+
+def _n(count, noun):
+    """"1 lead" / "3 leads"."""
+    return f"{count} {noun}" + ("" if count == 1 else "s")
+
+
+def _discovery(name, run_dir):
+    """A done card's latest discovery: counts read from the run's own files, or ""."""
+    run_dir = Path(run_dir)
+    if name == "Librarian":
+        docs = syn.read_json_or_none(run_dir / "manifest.json")
+        return f"{_n(len(docs), 'document')} in the library" if isinstance(docs, list) else ""
+    if name == "The hunters":
+        leads = syn.read_json_or_none(run_dir / "leads.json")
+        if not isinstance(leads, list):
+            return ""
+        counts = {}
+        for lead in leads:
+            first = ((lead.get("reasonings") or [{}]) if isinstance(lead, dict) else [{}])[0]
+            hunter = (first.get("hunter") if isinstance(first, dict) else None) or "unknown"
+            counts[hunter] = counts.get(hunter, 0) + 1
+        parts = [f"{HUNTER_NAMES.get(h, h)} {n}" for h, n in counts.items()]
+        return _n(len(leads), "lead") + (": " + ", ".join(parts) if parts else "")
+    findings = syn.read_json_or_none(run_dir / "findings.json")
+    if not isinstance(findings, list):
+        return ""
+    findings = [f for f in findings if isinstance(f, dict)]
+    reasonings = [r for f in findings for r in f.get("reasonings") or []]
+    if name == "Dedup":
+        return _n(len(findings), "distinct finding")
+    if name == "Fact Checker":
+        rated = [r.get("confidence") for r in reasonings if r.get("confidence")]
+        if not rated:
+            return ""
+        return " · ".join(f"{level} {rated.count(level)}" for level in ("High", "Medium", "Low")
+                          if level in rated)
+    if name == "Quant":
+        sized = sum(1 for f in findings
+                    if any((r.get("impact") or {}).get("usd_m") is not None
+                           for r in f.get("reasonings") or []))
+        return f"{sized} of {len(findings)} findings sized in dollars"
+    if name == "Scoring":
+        selected = sum(1 for f in findings if f.get("status") == "selected")
+        return f"{_n(selected, 'finding')} selected for your pick"
+    return ""
+
+
+def agent_cards(status, run_dir, live=True, every=False):
+    """The agent cards for one run, in run order: [{"group", "name", "job", "status", "state",
+    "who", "found", "problem"}]. After-your-pick cards appear once the finish phase started
+    (every=True: always). live=False: no job is working on the run any more."""
+    stages = status.get("stages", {})
+    finishing = every or any(name in stages for name in FINISH_STAGE_NAMES)
+    by_name = {}
+    for stage, (group, name, job) in STAGE_AGENTS.items():
+        if stage in FINISH_STAGE_NAMES and not finishing:
+            continue
+        card = by_name.setdefault(name, {"group": group, "name": name, "job": job,
+                                         "stages": []})
+        card["stages"].append((stages.get(stage) or {}).get("status"))
+    cards = []
+    for card in by_name.values():
+        state = _card_status(card.pop("stages"), live)
+        if (state == "not_reached" and card["group"] == "After your pick"
+                and status.get("phase") == "awaiting_human"):
+            state = "waiting"  # paused for the analyst's pick: these steps still lie ahead
+        cards.append({**card, "status": state, "state": CARD_STATES[state],
+                      "who": ", ".join(HUNTER_NAMES.values()) if card["name"] == "The hunters"
+                      else "",
+                      "found": _discovery(card["name"], run_dir) if state == "ok" else "",
+                      "problem": CARD_PROBLEMS.get(state, "")})
+    return cards
+
+
+def progress_fraction(cards):
+    """Share of cards whose step ended (done, skipped or with a problem), for the progress bar;
+    a stopped or never-reached step does not count."""
+    done = sum(1 for c in cards if c["status"] in ("ok", "skipped", "degraded", "failed"))
+    return done / len(cards) if cards else 0.0
+
+
+def cards_html(cards):
+    """The card grid as HTML (every value escaped)."""
+    out = []
+    for c in cards:
+        e = {k: html.escape(str(v)) for k, v in c.items()}
+        out.append(f'<div class="pharmer-card {e["status"]}"><div class="group">{e["group"]}</div>'
+                   f'<div class="head"><span class="name">{e["name"]}</span>'
+                   f'<span class="state">{e["state"]}</span></div>'
+                   f'<div class="job">{e["job"]}</div>'
+                   + (f'<div class="who">{e["who"]}</div>' if c["who"] else "")
+                   + (f'<div class="found">↳ {e["found"]}</div>' if c["found"] else "")
+                   + (f'<div class="problem">{e["problem"]}</div>' if c["problem"] else "")
+                   + "</div>")
+    return '<div class="pharmer-cards">' + "".join(out) + "</div>"
+
+
 def stage_problems(status):
     """Stages that did not simply succeed, for the warning above the stage table."""
     return [(name, e.get("status"), e.get("error")) for name, e in status.get("stages", {}).items()
@@ -325,10 +504,30 @@ def new_run_form():
 
 
 def stage_warning(status):
-    problems = stage_problems(status)
-    if problems:
-        st.warning("\n".join(f"- **{name}**: {state}" + (f" – {error}" if error else "")
-                             for name, state, error in problems))
+    """Plain-English list of agents that didn't simply succeed; raw errors stay in Details."""
+    lines = {}
+    for name, state, _ in stage_problems(status):
+        agent = STAGE_AGENTS.get(name, ("", name, ""))[1]
+        lines.setdefault(agent, f"- **{agent}**: {CARD_PROBLEMS[state].split('.')[0].lower()}")
+    if lines:
+        st.warning("\n".join(lines.values()))
+
+
+def agents_section(run_dir, status, live=True):
+    """Header, progress bar and agent cards for one run (live: a job is working on it)."""
+    ticker = status.get("ticker") or ""
+    company = librarian.CIKS.get(ticker, (None, ticker))[1]
+    cards = agent_cards(status, run_dir, live)
+    # The bar counts every card, after-your-pick ones too, so it never jumps backward.
+    progress = progress_fraction(agent_cards(status, run_dir, live, every=True))
+    st.html(f'<div class="pharmer-run-head"><span class="pharmer-ticker">{html.escape(ticker)}'
+            f'</span><span class="title">{html.escape(company)} · '
+            f'{"the agents are reading" if live else "what the agents did"}</span>'
+            f'</div><div class="pharmer-bar"><div style="width: '
+            f'{progress * 100:.0f}%"></div></div>' + cards_html(cards)
+            + ("" if any(c["group"] == "After your pick" for c in cards) else
+               '<div class="pharmer-after"><span>after your pick</span>Product comparison → '
+               "Synthesizer → CEO Move → PDF report</div>"))
 
 
 def stage_table(status):
@@ -350,8 +549,9 @@ def show_progress(run_dir):
         if status.get("phase") != "running" or str(run_dir) not in live_runs():
             st.rerun()
         st.info("Working… this page updates by itself.")
-        stage_warning(status)
-        stage_table(status)
+        agents_section(run_dir, status)
+        with st.expander("Details"):
+            stage_table(status)
     progress()
 
 
@@ -463,7 +663,10 @@ def show_run(run):
     if run["phase"] == "done":
         results_section(run_dir)
     stage_warning(status)
-    with st.expander("Pipeline stages", expanded=run["phase"] in ("failed", "interrupted")):
+    trouble = run["phase"] in ("failed", "interrupted")
+    with st.expander("The agents", expanded=trouble):
+        agents_section(run_dir, status, live=False)
+    with st.expander("Details", expanded=trouble):
         stage_table(status)
     start_done = (status.get("stages", {}).get("scoring_after_peer") or {}).get("status") == "ok"
     if start_done and run["phase"] != "interrupted":
