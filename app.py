@@ -32,6 +32,23 @@ STAGE_COLORS = {"ok": "green", "running": "blue", "skipped": "gray", "degraded":
 PHASE_LABELS = {"running": "running", "awaiting_human": "needs your pick", "done": "done",
                 "failed": "failed", "interrupted": "interrupted"}
 
+# The theme's colours are in .streamlit/config.toml; this adds what the theme can't set: the
+# amber monospace masthead, the header bar, panel-coloured cards and monospace numbers.
+CSS = """<style>
+:root { --pharmer-mono: 'SF Mono', Menlo, 'JetBrains Mono', monospace; }
+[data-testid="stHeader"] { background: #0d1117; border-bottom: 1px solid #232b37; }
+[data-testid="stMainBlockContainer"] { padding-top: 4.5rem; }  /* header bar + a little air */
+h1 { font-family: var(--pharmer-mono) !important; color: #ffb020 !important;
+     letter-spacing: 3px; font-size: 1.7rem !important; padding-bottom: 0 !important; }
+h2, h3 { letter-spacing: -0.3px; }
+[class*="st-key-card-"], details { background: #11161d; }
+[data-testid="stCaptionContainer"], [data-testid="stMetricValue"], code {
+  font-variant-numeric: tabular-nums; }
+[data-testid="stMetricValue"] { font-family: var(--pharmer-mono); }
+[data-testid^="stBaseButton-primary"], [data-testid^="stBaseButton-primary"] p {
+  color: #111 !important; font-weight: 700; }
+</style>"""
+
 
 # --- helpers (no rendering) ------------------------------------------------------------------
 
@@ -196,14 +213,14 @@ def _open(run_name):
     st.rerun()
 
 
-def sidebar(runs):
+def past_runs(runs):
+    """The run picker, tucked into a "Past runs" expander so the main view stays one screen."""
     labels = {r["name"]: r["label"] for r in runs}
     if "pending_run" in st.session_state:
         st.session_state["run"] = st.session_state.pop("pending_run")
     elif "run" not in st.session_state and st.query_params.get("run") in labels:
         st.session_state["run"] = st.query_params["run"]  # ?run=<name> opens a run directly
-    with st.sidebar:
-        st.header("Runs")
+    with st.expander(f"Past runs ({len(runs)})"):
         # Names only: a keyed selectbox keeps its first-rendered option labels, so a phase in
         # the label would go stale. Phases are listed below as plain text instead.
         chosen = st.selectbox("Open a run", [NEW_RUN] + list(labels), key="run",
@@ -298,7 +315,7 @@ def review_section(run_dir, ticker):
     if not rows:
         st.info("No findings were selected. You can still write the report; it explains why.")
     for row in rows:
-        with st.container(border=True):
+        with st.container(border=True, key=f"card-{row['finding_id']}"):
             tags = "".join(f" :violet-badge[{t}]" for t in row["labels"]
                            if t != "Sharpest Needle")
             st.markdown(f"**{row['number']}. {row['finding_id']} · {md(row['anchor'])}**{tags}")
@@ -358,6 +375,8 @@ def results_section(run_dir):
 def show_run(run):
     run_dir = run["path"]
     status = orchestrator.read_status(run_dir)
+    if st.button("➕ New run"):  # the picker is tucked away in "Past runs"; keep the way back visible
+        _open(NEW_RUN)
     st.subheader(run["name"])
     st.caption(f"Phase: {PHASE_LABELS.get(run['phase'], run['phase'])}")
     if run["phase"] == "running":
@@ -384,10 +403,11 @@ def show_run(run):
 def main():
     st.set_page_config(page_title="Pharmer Research", page_icon="\U0001faa1", layout="wide")
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
+    st.html(CSS)
     st.title("PHARMER RESEARCH")
     st.caption("We find the needle in the haystack.")
     runs = list_runs(live=live_runs())
-    chosen = sidebar(runs)
+    chosen = past_runs(runs)
     run = next((r for r in runs if r["name"] == chosen), None)
     if run is None:
         new_run_form()
