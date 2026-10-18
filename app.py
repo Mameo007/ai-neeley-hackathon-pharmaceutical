@@ -374,6 +374,8 @@ def agent_cards(status, run_dir, live=True, every=False):
     finishing = every or any(name in stages for name in FINISH_STAGE_NAMES)
     by_name = {}
     for stage, (group, name, job) in STAGE_AGENTS.items():
+        if stage in orchestrator.DISABLED_STAGES:
+            continue  # not built, never scheduled: it is not one of this run's agents
         if stage in FINISH_STAGE_NAMES and not finishing:
             continue
         card = by_name.setdefault(name, {"group": group, "name": name, "job": job,
@@ -589,9 +591,14 @@ def recovery(phase, status, run_dir, ticker):
 
 
 def stage_problems(status):
-    """Stages that did not simply succeed, for the warning above the stage table."""
+    """Stages that did not simply succeed, for the warning above the stage table.
+
+    A `disabled` stage is not a problem with this run - its agent is not built and was
+    never scheduled - so it raises no warning. Its entry stays in pipeline.json.
+    """
     return [(name, e.get("status"), e.get("error")) for name, e in status.get("stages", {}).items()
-            if e.get("status") in ("skipped", "degraded", "failed")]
+            if e.get("status") in ("skipped", "degraded", "failed")
+            and name not in orchestrator.DISABLED_STAGES]
 
 
 # --- background jobs --------------------------------------------------------------------------
@@ -819,11 +826,17 @@ def reasoning_block(r):
         st.html(f'<div class="pharmer-why">{html.escape(why_line(r))}</div>')
         score = "–" if r["score"] is None else r["score"]
         materiality = "–" if r["materiality"] is None else r["materiality"]
-        hits = "not checked" if r["priced_in_hits"] is None else r["priced_in_hits"]
+        hits = r["priced_in_hits"]
         with st.expander("How we scored it"):
-            st.caption(f"Score {score} = materiality {materiality} (|EPS impact %|) × obscurity "
-                       f"{r['obscurity']} (priced-in hits: {hits})"
-                       f" · raised by {', '.join(h for h in r['hunters'] if h)}"
+            # With the Priced-In Detector disabled every obscurity is the unchecked
+            # default, so naming it as a factor would claim a check nobody ran.
+            basis = (f"Score {score} = materiality {materiality} (|EPS impact %|)"
+                     " · market pricing not assessed, so this ranks on materiality alone"
+                     if hits is None else
+                     f"Score {score} = materiality {materiality} (|EPS impact %|) × obscurity "
+                     f"{r['obscurity']} (priced-in hits: {hits})")
+            st.caption(basis
+                       + f" · raised by {', '.join(h for h in r['hunters'] if h)}"
                        + (f" · confidence: {md(r['confidence_reason'])}"
                           if r.get("confidence_reason") else ""))
         for q in r["quotes"]:
