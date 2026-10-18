@@ -110,7 +110,20 @@ CONCEPT_MAP = {
     "total_assets": ["Assets"],
     "total_equity": ["StockholdersEquity", "Equity"],
     "trade_payables": ["AccountsPayableCurrent", "TradeAndOtherCurrentPayables"],
+    # The denominator Quant needs to express an impact as a percentage of EPS
+    # (architecture §5.1.2). Novo tags the diluted count as `AdjustedWeightedAverageShares`
+    # - `WeightedAverageShares` is the *basic* count and must not stand in for it.
+    "diluted_shares": ["WeightedAverageNumberOfDilutedSharesOutstanding",
+                       "AdjustedWeightedAverageShares"],
+    "diluted_eps": ["EarningsPerShareDiluted", "DilutedEarningsLossPerShare"],
 }
+
+# How a metric's XBRL unit is read. Everything absent from here is a currency amount in
+# the filer's reporting currency, scaled to millions. The two exceptions matter:
+#   `shares`    - a count, so it has no currency; scaled to millions of shares.
+#   `per_share` - already a per-share amount (`USD/shares`, `DKK/shares`), so scaling it
+#                 by a million would destroy it; the value is carried through verbatim.
+METRIC_UNITS = {"diluted_shares": "shares", "diluted_eps": "per_share"}
 
 # XBRL reports absolute amounts; Contract 1c carries millions, which is also the unit
 # the filing tables print - that equality is what the number-tie rule checks.
@@ -478,6 +491,24 @@ def _fact_period_key(fiscal_period):
     return f"{year}{label}"
 
 
+def _unit_fields(kind, unit):
+    """(scale, Contract 1c `unit`, Contract 1c `currency`) for an XBRL unit, or None.
+
+    None means this unit cannot express this metric and its rows are skipped - a money
+    metric reported in `shares`, a share count reported in `USD`, a ratio in `pure`.
+    """
+    if kind == "shares":
+        # A count of shares has no currency. Scaled to millions like every other figure,
+        # so `inputs` read in the same magnitude as revenue or net profit.
+        return (FACT_SCALE, "millions", None) if unit == "shares" else None
+    if kind == "per_share":
+        # `USD/shares`, `DKK/shares`: already per-share, so it is carried through at full
+        # precision. Dividing EPS of 7.94 by a million would make it unusable.
+        match = re.fullmatch(r"([A-Z]{3})/shares", unit)
+        return (1, "per_share", match.group(1)) if match else None
+    return (FACT_SCALE, "millions", unit) if re.fullmatch(r"[A-Z]{3}", unit) else None
+
+
 def _xbrl_facts(ticker):
     """Contract 1c facts for one ticker from SEC XBRL companyfacts.
 
@@ -504,10 +535,11 @@ def _xbrl_facts(ticker):
             continue
 
         taxonomy, tag, concept = entry
+        kind = METRIC_UNITS.get(metric, "currency")
         currencies = {unit: rows for unit, rows in concept["units"].items()
-                      if re.fullmatch(r"[A-Z]{3}", unit)}
+                      if _unit_fields(kind, unit) is not None}
         skipped += sum(len(rows) for unit, rows in concept["units"].items()
-                       if unit not in currencies)   # shares, USD/shares, ratios
+                       if unit not in currencies)   # ratios, pure/shares on a money metric
         # `fact_id` carries no currency segment, so one reporting currency per metric
         # keeps ids unique. No shortlist company currently reports a mapped metric in
         # two currencies, but nothing guarantees that for a judge-picked live run.
@@ -528,13 +560,14 @@ def _xbrl_facts(ticker):
                 if key not in best or row.get("filed", "") > best[key].get("filed", ""):
                     best[key] = row
         for (period, unit), row in sorted(best.items()):
+            scale, unit_label, currency = _unit_fields(kind, unit)
             facts.append({
                 "fact_id": f"{ticker}-xbrl-{metric}-{_fact_period_key(period)}",
                 "doc_id": f"{ticker}-XBRL",
                 "metric": metric,
-                "value": row["val"] / FACT_SCALE,
-                "unit": "millions",
-                "currency": unit,
+                "value": row["val"] / scale,
+                "unit": unit_label,
+                "currency": currency,
                 "fiscal_period": period,
                 "period_end": row["end"],
                 "source_kind": "xbrl",
