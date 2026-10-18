@@ -80,9 +80,9 @@ These were the load-bearing decisions that shape every stage below:
 | 2 | Dedup/merge | Dedup/merge step (code + LLM judge) | per fact-anchor group |
 | 3 | Independent verification | **Fact Checker** | runs per candidate |
 | 4 | Impact quantification | **Quant agent** | runs per candidate |
-| 5 | Priced-in / obscurity check | **Priced-In Detector** | runs per candidate |
+| 5 | Priced-in / obscurity check | **Priced-In Detector** *(deferred, §9.5)* | runs per candidate |
 | 6 | Scoring & ranking | **Selection/scoring logic** (code, not an agent persona) | 1 |
-| 7 | Peer re-rank | **Peer Agent** | runs once, only on top ~10 |
+| 7 | Peer re-rank | **Peer Agent** *(deferred, §9.5)* | runs once, only on top ~10 |
 | 8 | Final 5 + Sharpest Needle | AI selects 5 and tags one Recommended; **human names the Sharpest Needle** | 1 |
 | 9 | Product selection | Hybrid dropdown (AI pre-select + user confirm) | 1 |
 | 10 | Label/rival-specific hunting | **Label Lawyer** (+ rival fetch) | runs after product is fixed |
@@ -277,9 +277,9 @@ and proposes candidate findings with a citation (chunk ID) for every claim.
 | **Channel Checker** | Inventory/receivables vs. revenue | Inventory or receivables growing faster than revenue (softening demand, pre-launch stocking, channel stuffing) |
 | **Table Archaeologist** | Segment/product table changes | Restated or dropped prior-period numbers, products quietly no longer broken out |
 | **Footnote Miner** | Footnotes | Litigation reserves, partner royalty splits, earn-out/acquisition payments, tax-rate changes |
-| **Call Decoder** | Earnings-call Q&A | Deflected questions, new phrases, metrics the company stopped reporting |
+| **Call Decoder** *(deferred, §9.5)* | Earnings-call Q&A | Deflected questions, new phrases, metrics the company stopped reporting |
 | **Label Lawyer** | Product fine print | Label breadth, boxed warnings, REMS requirements vs. rivals (runs a company-wide pass early; a second, product-specific pass runs after product selection, §6) |
-| **Peer Contraster** | Peer contrast | Company's differential exposure to IRA/MFN/tariffs vs. shortlist peers |
+| **Peer Contraster** *(deferred, §9.5)* | Peer contrast | Company's differential exposure to IRA/MFN/tariffs vs. shortlist peers |
 
 - **Scope dependency:** Librarian coverage must satisfy every hunter's
   needs, including peer companies' filings (Peer Contraster) and rival
@@ -744,6 +744,25 @@ several, each caught by checking against the primary source:
    usable.
 7. **Report visual template** — branding and structure are fixed; the PDF's
    visual design is produced at build time.
+
+### 9.5 Deferred for the hackathon deadline (decided 2026-10-18)
+
+Cut to ship on time; the design above stays the target. Each cut stage is
+skipped visibly by the orchestrator ("skipped: not built"), and the
+fallbacks below are already in code.
+
+| Deferred | Why it can wait | What runs instead |
+|---|---|---|
+| **Peer Agent** (§4.6) | No rival filings in the corpus yet, so every finding would be "peer check incomplete" (no demotion) anyway | Scoring treats peer as null ⇒ no demotion |
+| **Peer Contraster** hunter | Same: needs rival filings | 6 of the 8 hunters run |
+| **Call Decoder** hunter | No transcripts in the corpus; §7 already plans for their absence | Marked skipped, per §7 |
+| **Priced-In Detector** (§4.5) | Verdict's priced-in call is written by the Synthesizer from the selected findings | Scoring counts unchecked as not priced in (obscurity 1.0), so ranking is by Materiality alone |
+| Orange / Purple Book fetch | Only the patent/exclusivity row needs it | That row prints "not disclosed" (§4.7 rule) |
+| Report polish: skipped-stage notes in the PDF, per-cell comparison footnotes, rivals field in the UI | Cosmetic / CLI `--rivals` works | Stage status in `pipeline.json`; cell sources in `comparison_sources.json` |
+
+**Not deferred (ship path):** Label Lawyer hunter (the final 5 must hold a
+label/product finding, §5.1 label guarantee), the Synthesizer's crash with
+no API credential, Quant (Partner A), then one real end-to-end run.
 
 ---
 
