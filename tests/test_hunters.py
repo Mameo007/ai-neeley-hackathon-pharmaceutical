@@ -8,6 +8,7 @@ import json
 import shutil
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 from types import SimpleNamespace as NS
 
@@ -135,7 +136,9 @@ class RunTests(HunterTestCase):
                 lead(), lead(is_label_finding=True)]})]),
             end_turn(),
         )
-        asyncio.run(hunters.run(self.run_dir))
+        # One scripted conversation, so one hunter (the swarm shares the fake client's queue).
+        with mock.patch.object(hunters, "HUNTERS", [channel_checker]):
+            asyncio.run(hunters.run(self.run_dir))
 
         first_lead, second_lead = json.loads((self.run_dir / "leads.json").read_text())
         self.assertEqual([first_lead["finding_id"], second_lead["finding_id"]], ["F-001", "F-002"])
@@ -229,3 +232,19 @@ class RunTests(HunterTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class HunterRegistryTests(unittest.TestCase):
+    """Every hunter module follows the Channel Checker pattern (offline; briefs not yet run
+    against the real API)."""
+
+    def test_each_hunter_has_matching_name_brief_and_registration(self):
+        from pharmer import hunters
+        names = [h.NAME for h in hunters.HUNTERS]
+        self.assertEqual(names, ["channel_checker", "redliner", "table_archaeologist",
+                                 "footnote_miner", "gross_to_net"])
+        for hunter in hunters.HUNTERS:
+            self.assertEqual(hunter.__name__, f"pharmer.hunters.{hunter.NAME}")
+            self.assertTrue(hunter.BRIEF.startswith("# "), hunter.NAME)
+            self.assertIn("fiscal_period", hunter.BRIEF)  # the Dedup anchor rule
+            self.assertNotIn("Novo", hunter.BRIEF)  # no company-specific priming
