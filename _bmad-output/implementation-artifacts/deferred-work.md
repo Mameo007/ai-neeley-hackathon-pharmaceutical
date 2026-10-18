@@ -151,6 +151,3 @@ existing entries.
 - source_spec: none
   summary: Peer Agent, Peer Contraster and Call Decoder hunters, Priced-In Detector, Orange/Purple Book fetch, and report polish (skipped-stage notes in PDF, comparison footnotes, UI rivals field) deferred past the hackathon deadline.
   evidence: Human scope decision 2026-10-18; see docs/architecture.md §9.5.
-- source_spec: `_bmad-output/implementation-artifacts/spec-repo-demo-disable-unbuilt-stages.md`
-  summary: Check that a live Synthesizer verdict makes no priced-in claim when no reasoning has a priced-in check (new prompt rule untested live).
-  evidence: The report replaces the market-view label, but the verdict sentence is model text; read synthesis.json after the next live run. A verdict that still says "priced in" needs a code check like the existing priced_in_call one.
