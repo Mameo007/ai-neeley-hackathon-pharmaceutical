@@ -397,17 +397,17 @@ class PdfTests(ReportTestCase):
         data = self.render()
         for text in (b"PHARMER RESEARCH", b"We find the needle in the haystack.",
                      b"Sharpest Needle: Illustrative: inventory 333 built up.", b"[HIGH]",
-                     b"Market view: partly priced in.", b"Recommended CEO move",
+                     b"Market view: partly priced in.", b"24-Month Strategic Move for the CEO",
                      b"Downside if wrong:", SOURCE_P14.encode(), b"[1]",
                      b"Comparison table not built for this run."):
             self.assertIn(text, data)
-        self.assertNotIn(b"Warnings for this run", data)
+        self.assertNotIn(b"Coverage and limitations", data)
 
     def test_failure_states_reach_the_pdf(self):
         (self.run_dir / "ceo_move.json").unlink()
         self.write("run.json", {})
         data = self.render()
-        for text in (b"Warnings for this run", b"CEO move unavailable.",
+        for text in (b"Coverage and limitations", b"CEO move unavailable.",
                      b"not yet confirmed by the analyst"):
             self.assertIn(text, data)
 
