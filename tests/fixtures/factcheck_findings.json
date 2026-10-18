@@ -1,0 +1,276 @@
+{
+  "LLY": [
+    {
+      "finding_id": "F-001",
+      "ticker": "LLY",
+      "anchor": {
+        "metric": "revenue",
+        "entity": "Eli Lilly and Company",
+        "fiscal_period": "FY2024",
+        "value": 45042.7,
+        "unit": "millions",
+        "currency": "USD"
+      },
+      "is_label_finding": false,
+      "contested": false,
+      "lead_reasoning_id": "F-001-a",
+      "reasonings": [
+        {
+          "reasoning_id": "F-001-a",
+          "hunter": "table_archaeologist",
+          "hunters": [
+            "table_archaeologist"
+          ],
+          "claim": "FY2024 revenue of 45,042.7 is printed to one decimal in the FY2024 10-K.",
+          "citations": [
+            {
+              "chunk_id": "LLY-10K-FY2024-p41-c03",
+              "quote": "Revenue\t$\t45,042.7"
+            }
+          ],
+          "confidence": null,
+          "confidence_reason": "",
+          "flags": [],
+          "trend": [],
+          "impact": null,
+          "priced_in": null,
+          "score": null
+        }
+      ],
+      "peer": {
+        "status": null,
+        "note": ""
+      },
+      "status": "candidate",
+      "recommended": false
+    },
+    {
+      "finding_id": "F-002",
+      "ticker": "LLY",
+      "anchor": {
+        "metric": "revenue",
+        "entity": "Eli Lilly and Company",
+        "fiscal_period": "FY2024",
+        "value": 45042.7,
+        "unit": "millions",
+        "currency": "USD"
+      },
+      "is_label_finding": false,
+      "contested": false,
+      "lead_reasoning_id": "F-002-a",
+      "reasonings": [
+        {
+          "reasoning_id": "F-002-a",
+          "hunter": "footnote_miner",
+          "hunters": [
+            "footnote_miner"
+          ],
+          "claim": "FY2024 revenue was 45,042.7, quoted from a space-joined corpus.",
+          "citations": [
+            {
+              "chunk_id": "LLY-10K-FY2024-p41-c03",
+              "quote": "Revenue $ 45,042.7"
+            }
+          ],
+          "confidence": null,
+          "confidence_reason": "",
+          "flags": [],
+          "trend": [],
+          "impact": null,
+          "priced_in": null,
+          "score": null
+        }
+      ],
+      "peer": {
+        "status": null,
+        "note": ""
+      },
+      "status": "candidate",
+      "recommended": false
+    },
+    {
+      "finding_id": "F-003",
+      "ticker": "LLY",
+      "anchor": {
+        "metric": "revenue",
+        "entity": "Eli Lilly and Company",
+        "fiscal_period": "FY2024",
+        "value": 65179.0,
+        "unit": "millions",
+        "currency": "USD"
+      },
+      "is_label_finding": false,
+      "contested": false,
+      "lead_reasoning_id": "F-003-a",
+      "reasonings": [
+        {
+          "reasoning_id": "F-003-a",
+          "hunter": "table_archaeologist",
+          "hunters": [
+            "table_archaeologist"
+          ],
+          "claim": "FY2024 revenue was 65,179.",
+          "citations": [
+            {
+              "chunk_id": "LLY-10K-FY2025-p43-c03",
+              "quote": "Revenue\t$\t65,179"
+            }
+          ],
+          "confidence": null,
+          "confidence_reason": "",
+          "flags": [],
+          "trend": [],
+          "impact": null,
+          "priced_in": null,
+          "score": null
+        }
+      ],
+      "peer": {
+        "status": null,
+        "note": ""
+      },
+      "status": "candidate",
+      "recommended": false
+    },
+    {
+      "finding_id": "F-004",
+      "ticker": "LLY",
+      "anchor": {
+        "metric": "revenue",
+        "entity": "Eli Lilly and Company",
+        "fiscal_period": "Q2 2026",
+        "value": 22974.0,
+        "unit": "millions",
+        "currency": "USD"
+      },
+      "is_label_finding": false,
+      "contested": true,
+      "lead_reasoning_id": "F-004-a",
+      "reasonings": [
+        {
+          "reasoning_id": "F-004-a",
+          "hunter": "table_archaeologist",
+          "hunters": [
+            "table_archaeologist"
+          ],
+          "claim": "Q2 2026 revenue reached 22,974, up from 15,558 a year earlier.",
+          "citations": [
+            {
+              "chunk_id": "LLY-10Q-2026Q2-p5-c03",
+              "quote": "Revenue\t$\t22,974\t$\t15,558"
+            }
+          ],
+          "confidence": null,
+          "confidence_reason": "",
+          "flags": [
+            "contested"
+          ],
+          "trend": [],
+          "impact": null,
+          "priced_in": null,
+          "score": null
+        }
+      ],
+      "peer": {
+        "status": null,
+        "note": ""
+      },
+      "status": "candidate",
+      "recommended": false
+    }
+  ],
+  "NVO": [
+    {
+      "finding_id": "F-001",
+      "ticker": "NVO",
+      "anchor": {
+        "metric": "trade_receivables",
+        "entity": "Novo Nordisk A/S",
+        "fiscal_period": "Q2 2026",
+        "value": 88949,
+        "unit": "millions",
+        "currency": "DKK"
+      },
+      "is_label_finding": false,
+      "contested": false,
+      "lead_reasoning_id": "F-001-a",
+      "reasonings": [
+        {
+          "reasoning_id": "F-001-a",
+          "hunter": "channel_checker",
+          "hunters": [
+            "channel_checker"
+          ],
+          "claim": "Trade receivables of 88,949 are 27.8% above the 69,575 reported a year earlier, far faster than sales growth.",
+          "citations": [
+            {
+              "chunk_id": "NVO-6K-2026Q2-p28-c02",
+              "quote": "Trade receivables 88,949"
+            },
+            {
+              "chunk_id": "NVO-6K-2025Q2-p30-c02",
+              "quote": "Trade receivables 69,575"
+            }
+          ],
+          "confidence": null,
+          "confidence_reason": "",
+          "flags": [],
+          "trend": [],
+          "impact": null,
+          "priced_in": null,
+          "score": null
+        }
+      ],
+      "peer": {
+        "status": null,
+        "note": ""
+      },
+      "status": "candidate",
+      "recommended": false
+    },
+    {
+      "finding_id": "F-002",
+      "ticker": "NVO",
+      "anchor": {
+        "metric": "trade_receivables",
+        "entity": "Novo Nordisk A/S",
+        "fiscal_period": "FY2025",
+        "value": 70856,
+        "unit": "millions",
+        "currency": "DKK"
+      },
+      "is_label_finding": false,
+      "contested": false,
+      "lead_reasoning_id": "F-002-a",
+      "reasonings": [
+        {
+          "reasoning_id": "F-002-a",
+          "hunter": "table_archaeologist",
+          "hunters": [
+            "table_archaeologist"
+          ],
+          "claim": "FY2025 trade receivables of 70,856 fell slightly against FY2024.",
+          "citations": [
+            {
+              "chunk_id": "NVO-6K-2026Q2-p28-c02",
+              "quote": "Trade receivables 88,949 70,856"
+            }
+          ],
+          "confidence": null,
+          "confidence_reason": "",
+          "flags": [],
+          "trend": [],
+          "impact": null,
+          "priced_in": null,
+          "score": null
+        }
+      ],
+      "peer": {
+        "status": null,
+        "note": ""
+      },
+      "status": "candidate",
+      "recommended": false
+    }
+  ]
+}

@@ -1,0 +1,399 @@
+{
+  "LLY": {
+    "manifest": [
+      {
+        "doc_id": "LLY-10K-FY2024",
+        "company": "Eli Lilly",
+        "ticker": "LLY",
+        "doc_type": "10-K",
+        "fiscal_period": "FY2024",
+        "period_end": "2024-12-31",
+        "filed_date": "2025-02-19",
+        "url": "https://www.sec.gov/Archives/edgar/data/59478/000005947825000067/lly-20241231.htm",
+        "accession": "0000059478-25-000067",
+        "source": "live",
+        "collected_date": null,
+        "application_no": null,
+        "labeler_code": null
+      },
+      {
+        "doc_id": "LLY-10K-FY2025",
+        "company": "Eli Lilly",
+        "ticker": "LLY",
+        "doc_type": "10-K",
+        "fiscal_period": "FY2025",
+        "period_end": "2025-12-31",
+        "filed_date": "2026-02-12",
+        "url": "https://www.sec.gov/Archives/edgar/data/59478/000005947826000013/lly-20251231.htm",
+        "accession": "0000059478-26-000013",
+        "source": "live",
+        "collected_date": null,
+        "application_no": null,
+        "labeler_code": null
+      },
+      {
+        "doc_id": "LLY-10Q-2026Q2",
+        "company": "Eli Lilly",
+        "ticker": "LLY",
+        "doc_type": "10-Q",
+        "fiscal_period": "Q2 2026",
+        "period_end": "2026-06-30",
+        "filed_date": "2026-08-05",
+        "url": "https://www.sec.gov/Archives/edgar/data/59478/000005947826000081/lly-20260630.htm",
+        "accession": "0000059478-26-000081",
+        "source": "live",
+        "collected_date": null,
+        "application_no": null,
+        "labeler_code": null
+      },
+      {
+        "doc_id": "LLY-XBRL",
+        "company": "Eli Lilly",
+        "ticker": "LLY",
+        "doc_type": "xbrl",
+        "fiscal_period": "",
+        "period_end": null,
+        "filed_date": null,
+        "url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0000059478.json",
+        "accession": null,
+        "source": "live",
+        "collected_date": null,
+        "application_no": null,
+        "labeler_code": null
+      }
+    ],
+    "chunks": [
+      {
+        "chunk_id": "LLY-10K-FY2024-p41-c03",
+        "doc_id": "LLY-10K-FY2024",
+        "page": 41,
+        "section": "Item 7.Management's Discussion and Analysis of Results of Operations and Financial Condition",
+        "is_table": true,
+        "text": "Year Ended December 31,\tPercent Change\n2024\t2023\nRevenue\t$\t45,042.7\t$\t34,124.1\t32\nNet income\t10,590.0\t5,240.4\t102\nEarnings per share - diluted\t11.71\t5.80\t102"
+      },
+      {
+        "chunk_id": "LLY-10K-FY2025-p43-c03",
+        "doc_id": "LLY-10K-FY2025",
+        "page": 43,
+        "section": "Item 7.Management's Discussion and Analysis of Results of Operations and Financial Condition",
+        "is_table": true,
+        "text": "Year Ended December 31,\tPercent Change\n2025\t2024\nRevenue\t$\t65,179\t$\t45,043\t45\nNet income\t20,640\t10,590\t95\nEarnings per share - diluted\t22.95\t11.71\t96"
+      },
+      {
+        "chunk_id": "LLY-10K-FY2025-p49-c06",
+        "doc_id": "LLY-10K-FY2025",
+        "page": 49,
+        "section": "Item 7.Management's Discussion and Analysis of Results of Operations and Financial Condition",
+        "is_table": true,
+        "text": "Year Ended December 31,\n2025\t2024\tPercent Change\nU.S.\tOutside U.S.\tTotal\tTotal\nMounjaro\t$\t13,651\t$\t9,315\t$\t22,965\t$\t11,540\t99\nZepbound(1)\t13,484\t58\t13,542\t4,926\t175\nVerzenio\t3,464\t2,259\t5,723\t5,307\t8\nOther products\t12,882\t10,066\t22,949\t23,270\t(1)\nRevenue\t$\t43,481\t$\t21,698\t$\t65,179\t$\t45,043\t45"
+      },
+      {
+        "chunk_id": "LLY-10Q-2026Q2-p5-c03",
+        "doc_id": "LLY-10Q-2026Q2",
+        "page": 5,
+        "section": "Item 1. Financial Statements",
+        "is_table": true,
+        "text": "Three Months Ended June 30,\tSix Months Ended June 30,\n2026\t2025\t2026\t2025\nRevenue\t$\t22,974\t$\t15,558\t$\t42,773\t$\t28,286\nCosts, expenses, and other:\nCost of sales\t3,268\t2,448\t6,845\t4,672\nResearch and development\t3,819\t3,336\t7,329\t6,070\nMarketing, selling, and administrative\t3,430\t2,753\t6,364\t5,221\nAcquired in-process research and development\t2,776\t154\t3,360\t1,726\nAsset impairment, restructuring, and other special charges\t703\t—\t982\t35\nOther–net, (income) expense\t(269)\t90\t(204)\t329\n13,727\t8,781\t24,676\t18,053\nIncome before income taxes\t9,247\t6,777\t18,097\t10,233\nIncome taxes\t2,152\t1,116\t3,606\t1,813\nNet income\t$\t7,095\t$\t5,661\t$\t14,491\t$\t8,420\nEarnings per share:\nBasic\t$\t7.95\t$\t6.30\t$\t16.22\t$\t9.37\nDiluted\t$\t7.94\t$\t6.29\t$\t16.19\t$\t9.35\nShares used in calculation of earnings per share:\nBasic\t892.4\t897.9\t893.5\t898.3\nDiluted\t893.7\t899.8\t894.8\t900.2"
+      },
+      {
+        "chunk_id": "LLY-10Q-2026Q2-p1-c02",
+        "doc_id": "LLY-10Q-2026Q2",
+        "page": 1,
+        "section": "",
+        "is_table": false,
+        "text": "UNITED STATES\nSECURITIES AND EXCHANGE COMMISSION\nWashington, D.C. 20549\nForm 10-Q\nQuarterly Report Pursuant to Section 13 or 15(d) of the\nSecurities Exchange Act of 1934\nFor the quarterly period ended June 30, 2026\nCOMMISSION FILE NUMBER 001-6351\nELI LILLY AND COMPANY\n(Exact name of Registrant as specified in its charter)"
+      }
+    ],
+    "facts": [
+      {
+        "fact_id": "LLY-xbrl-revenue-FY2022",
+        "doc_id": "LLY-XBRL",
+        "metric": "revenue",
+        "value": 28541.4,
+        "unit": "millions",
+        "currency": "USD",
+        "fiscal_period": "FY2022",
+        "period_end": "2022-12-31",
+        "source_kind": "xbrl"
+      },
+      {
+        "fact_id": "LLY-xbrl-revenue-FY2023",
+        "doc_id": "LLY-XBRL",
+        "metric": "revenue",
+        "value": 34124.0,
+        "unit": "millions",
+        "currency": "USD",
+        "fiscal_period": "FY2023",
+        "period_end": "2023-12-31",
+        "source_kind": "xbrl"
+      },
+      {
+        "fact_id": "LLY-xbrl-revenue-FY2024",
+        "doc_id": "LLY-XBRL",
+        "metric": "revenue",
+        "value": 45043.0,
+        "unit": "millions",
+        "currency": "USD",
+        "fiscal_period": "FY2024",
+        "period_end": "2024-12-31",
+        "source_kind": "xbrl"
+      },
+      {
+        "fact_id": "LLY-xbrl-revenue-FY2025",
+        "doc_id": "LLY-XBRL",
+        "metric": "revenue",
+        "value": 65179.0,
+        "unit": "millions",
+        "currency": "USD",
+        "fiscal_period": "FY2025",
+        "period_end": "2025-12-31",
+        "source_kind": "xbrl"
+      },
+      {
+        "fact_id": "LLY-xbrl-revenue-2026H1",
+        "doc_id": "LLY-XBRL",
+        "metric": "revenue",
+        "value": 42773.0,
+        "unit": "millions",
+        "currency": "USD",
+        "fiscal_period": "H1 2026",
+        "period_end": "2026-06-30",
+        "source_kind": "xbrl"
+      },
+      {
+        "fact_id": "LLY-xbrl-revenue-2023Q2",
+        "doc_id": "LLY-XBRL",
+        "metric": "revenue",
+        "value": 8312.1,
+        "unit": "millions",
+        "currency": "USD",
+        "fiscal_period": "Q2 2023",
+        "period_end": "2023-06-30",
+        "source_kind": "xbrl"
+      },
+      {
+        "fact_id": "LLY-xbrl-revenue-2024Q2",
+        "doc_id": "LLY-XBRL",
+        "metric": "revenue",
+        "value": 11302.8,
+        "unit": "millions",
+        "currency": "USD",
+        "fiscal_period": "Q2 2024",
+        "period_end": "2024-06-30",
+        "source_kind": "xbrl"
+      },
+      {
+        "fact_id": "LLY-xbrl-revenue-2025Q2",
+        "doc_id": "LLY-XBRL",
+        "metric": "revenue",
+        "value": 15558.0,
+        "unit": "millions",
+        "currency": "USD",
+        "fiscal_period": "Q2 2025",
+        "period_end": "2025-06-30",
+        "source_kind": "xbrl"
+      },
+      {
+        "fact_id": "LLY-xbrl-revenue-2026Q2",
+        "doc_id": "LLY-XBRL",
+        "metric": "revenue",
+        "value": 22974.0,
+        "unit": "millions",
+        "currency": "USD",
+        "fiscal_period": "Q2 2026",
+        "period_end": "2026-06-30",
+        "source_kind": "xbrl"
+      },
+      {
+        "fact_id": "LLY-xbrl-trade_receivables-FY2022",
+        "doc_id": "LLY-XBRL",
+        "metric": "trade_receivables",
+        "value": 6896.0,
+        "unit": "millions",
+        "currency": "USD",
+        "fiscal_period": "FY2022",
+        "period_end": "2022-12-31",
+        "source_kind": "xbrl"
+      },
+      {
+        "fact_id": "LLY-xbrl-trade_receivables-FY2023",
+        "doc_id": "LLY-XBRL",
+        "metric": "trade_receivables",
+        "value": 9090.5,
+        "unit": "millions",
+        "currency": "USD",
+        "fiscal_period": "FY2023",
+        "period_end": "2023-12-31",
+        "source_kind": "xbrl"
+      },
+      {
+        "fact_id": "LLY-xbrl-trade_receivables-FY2024",
+        "doc_id": "LLY-XBRL",
+        "metric": "trade_receivables",
+        "value": 11006.0,
+        "unit": "millions",
+        "currency": "USD",
+        "fiscal_period": "FY2024",
+        "period_end": "2024-12-31",
+        "source_kind": "xbrl"
+      },
+      {
+        "fact_id": "LLY-xbrl-trade_receivables-FY2025",
+        "doc_id": "LLY-XBRL",
+        "metric": "trade_receivables",
+        "value": 17760.0,
+        "unit": "millions",
+        "currency": "USD",
+        "fiscal_period": "FY2025",
+        "period_end": "2025-12-31",
+        "source_kind": "xbrl"
+      },
+      {
+        "fact_id": "LLY-xbrl-trade_receivables-2023Q2",
+        "doc_id": "LLY-XBRL",
+        "metric": "trade_receivables",
+        "value": 7516.1,
+        "unit": "millions",
+        "currency": "USD",
+        "fiscal_period": "Q2 2023",
+        "period_end": "2023-06-30",
+        "source_kind": "xbrl"
+      },
+      {
+        "fact_id": "LLY-xbrl-trade_receivables-2024Q2",
+        "doc_id": "LLY-XBRL",
+        "metric": "trade_receivables",
+        "value": 11027.9,
+        "unit": "millions",
+        "currency": "USD",
+        "fiscal_period": "Q2 2024",
+        "period_end": "2024-06-30",
+        "source_kind": "xbrl"
+      },
+      {
+        "fact_id": "LLY-xbrl-trade_receivables-2025Q2",
+        "doc_id": "LLY-XBRL",
+        "metric": "trade_receivables",
+        "value": 14170.4,
+        "unit": "millions",
+        "currency": "USD",
+        "fiscal_period": "Q2 2025",
+        "period_end": "2025-06-30",
+        "source_kind": "xbrl"
+      },
+      {
+        "fact_id": "LLY-xbrl-trade_receivables-2026Q2",
+        "doc_id": "LLY-XBRL",
+        "metric": "trade_receivables",
+        "value": 20083.0,
+        "unit": "millions",
+        "currency": "USD",
+        "fiscal_period": "Q2 2026",
+        "period_end": "2026-06-30",
+        "source_kind": "xbrl"
+      }
+    ]
+  },
+  "NVO": {
+    "manifest": [
+      {
+        "doc_id": "NVO-6K-2026Q2",
+        "company": "Novo Nordisk",
+        "ticker": "NVO",
+        "doc_type": "6-K",
+        "fiscal_period": "Q2 2026",
+        "period_end": "2026-06-30",
+        "filed_date": "2026-08-04",
+        "url": "https://www.sec.gov/Archives/edgar/data/353278/000035327826000023/caq22026.htm",
+        "accession": "0000353278-26-000023",
+        "source": "pre-collected",
+        "collected_date": "2026-10-18",
+        "application_no": null,
+        "labeler_code": null
+      },
+      {
+        "doc_id": "NVO-6K-2025Q2",
+        "company": "Novo Nordisk",
+        "ticker": "NVO",
+        "doc_type": "6-K",
+        "fiscal_period": "Q2 2025",
+        "period_end": "2025-06-30",
+        "filed_date": "2025-08-06",
+        "url": "https://www.sec.gov/Archives/edgar/data/353278/000162828025038087/caq22025.htm",
+        "accession": "0001628280-25-038087",
+        "source": "pre-collected",
+        "collected_date": "2026-10-18",
+        "application_no": null,
+        "labeler_code": null
+      },
+      {
+        "doc_id": "NVO-XBRL",
+        "company": "Novo Nordisk",
+        "ticker": "NVO",
+        "doc_type": "xbrl",
+        "fiscal_period": "FY2025",
+        "period_end": "2025-12-31",
+        "filed_date": "2026-02-04",
+        "url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0000353278.json",
+        "accession": null,
+        "source": "pre-collected",
+        "collected_date": "2026-10-18",
+        "application_no": null,
+        "labeler_code": null
+      }
+    ],
+    "chunks": [
+      {
+        "chunk_id": "NVO-6K-2026Q2-p28-c02",
+        "doc_id": "NVO-6K-2026Q2",
+        "page": 28,
+        "section": "APPENDIX 3: CONDENSED BALANCE SHEET",
+        "is_table": true,
+        "text": "DKK million 30 Jun 2026 31 Dec 2025\nASSETS\nIntangible assets 102,167 110,208\nGoodwill 19,890 19,845\nProperty, plant and equipment 231,758 208,378\nInvestments in associated companies 207 366\nDeferred income tax assets 23,672 23,647\nOther receivables and prepayments 6,428 5,864\nOther financial assets 2,123 2,141\nTOTAL NON-CURRENT ASSETS 386,245 370,449\nInventories 51,352 49,623\nTrade receivables 88,949 70,856\nTax receivables 4,952 4,848\nOther receivables and prepayments 14,611 13,482\nMarketable securities 500 498\nDerivative financial instruments 3,850 6,682\nCash at bank 44,482 26,464\nTOTAL CURRENT ASSETS 208,696 172,453\nTOTAL ASSETS 594,941 542,902\nEQUITY AND LIABILITIES\nShare capital 446 446\nTreasury shares (4) (2)\nRetained earnings 224,164 195,298\nOther reserves (3,329) (1,695)\nTOTAL EQUITY 221,277 194,047\nBorrowings 121,794 118,941\nDeferred income tax liabilities 4,271 6,611\nRetirement benefit obligations 787 861\nProvisions 6,200 5,730\nSales deductions and product returns 1,529 1,051\nTotal non-current liabilities 134,581 133,194\nBorrowings 18,333 12,017\nTrade payables 14,591 19,758\nTax payables 20,460 8,416\nOther liabilities 38,376 39,721\nDerivative financial instruments 5,245 2,026\nProvisions 1,877 374\nSales deductions and product returns1 140,201 133,349\nTotal current liabilities 239,083 215,661\nTOTAL LIABILITIES 373,664 348,855\nTOTAL EQUITY AND LIABILITIES 594,941 542,902"
+      },
+      {
+        "chunk_id": "NVO-6K-2025Q2-p30-c02",
+        "doc_id": "NVO-6K-2025Q2",
+        "page": 30,
+        "section": "APPENDIX 4: BALANCE SHEET",
+        "is_table": true,
+        "text": "DKK million 30 Jun 2025 31 Dec 2024\nASSETS\nIntangible assets 107,866 111,090\nProperty, plant and equipment 180,758 162,488\nInvestments in associated companies 390 400\nDeferred income tax assets 23,747 24,627\nOther receivables and prepayments 4,439 4,016\nOther financial assets 2,248 2,277\nTOTAL NON-CURRENT ASSETS 319,448 304,898\nInventories 45,652 40,849\nTrade receivables 69,575 71,949\nTax receivables 2,995 2,853\nOther receivables and prepayments 13,273 12,612\nMarketable securities 499 10,653\nDerivative financial instruments 12,276 6,326\nCash at bank 18,435 15,655\nTOTAL CURRENT ASSETS 162,705 160,897\nTOTAL ASSETS 482,153 465,795\nEQUITY AND LIABILITIES\nShare capital 446 446\nTreasury shares (2) (2)\nRetained earnings 164,453 144,448\nOther reserves 3,169 (1,406)\nTOTAL EQUITY 168,066 143,486\nBorrowings 87,305 89,674\nDeferred income tax liabilities 9,796 5,426\nRetirement benefit obligations 810 903\nOther liabilities 17 23\nProvisions 8,637 8,755\nTotal non-current liabilities 106,565 104,781\nBorrowings 11,963 13,113\nTrade payables 28,206 28,846\nTax payables 16,927 9,716\nOther liabilities 32,970 37,993\nDerivative financial instruments 5,329 7,531\nProvisions1 112,127 120,329\nTotal current liabilities 207,522 217,528\nTOTAL LIABILITIES 314,087 322,309\nTOTAL EQUITY AND LIABILITIES 482,153 465,795"
+      }
+    ],
+    "facts": [
+      {
+        "fact_id": "NVO-xbrl-trade_receivables-FY2023",
+        "doc_id": "NVO-XBRL",
+        "metric": "trade_receivables",
+        "value": 64770,
+        "unit": "millions",
+        "currency": "DKK",
+        "fiscal_period": "FY2023",
+        "period_end": "2023-12-31",
+        "source_kind": "xbrl"
+      },
+      {
+        "fact_id": "NVO-xbrl-trade_receivables-FY2024",
+        "doc_id": "NVO-XBRL",
+        "metric": "trade_receivables",
+        "value": 71949,
+        "unit": "millions",
+        "currency": "DKK",
+        "fiscal_period": "FY2024",
+        "period_end": "2024-12-31",
+        "source_kind": "xbrl"
+      },
+      {
+        "fact_id": "NVO-xbrl-trade_receivables-FY2025",
+        "doc_id": "NVO-XBRL",
+        "metric": "trade_receivables",
+        "value": 70856,
+        "unit": "millions",
+        "currency": "DKK",
+        "fiscal_period": "FY2025",
+        "period_end": "2025-12-31",
+        "source_kind": "xbrl"
+      }
+    ]
+  }
+}
