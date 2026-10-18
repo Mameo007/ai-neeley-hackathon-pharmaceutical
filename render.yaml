@@ -2,21 +2,13 @@ services:
   - type: web
     name: pharmer-research
     runtime: python
-    plan: starter
+    plan: free
     buildCommand: pip install -r requirements.txt
     startCommand: python -m streamlit run app.py --server.address 0.0.0.0 --server.port $PORT --server.headless true
     healthCheckPath: /_stcore/health
-    disk:
-      name: pharmer-data
-      mountPath: /var/data
-      sizeGB: 1
     envVars:
       - key: PYTHON_VERSION
         value: 3.14.3
-      - key: PHARMER_RUNS_DIR
-        value: /var/data/runs
-      - key: PHARMER_LOGS_DIR
-        value: /var/data/logs
       - key: ANTHROPIC_API_KEY
         sync: false
       - key: PHARMER_SEC_UA
