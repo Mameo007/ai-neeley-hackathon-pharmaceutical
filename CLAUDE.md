@@ -5,7 +5,8 @@ Claude memory is per-machine, so **the repo is the shared memory**. Read these
 before starting any task:
 
 - `docs/architecture.md` — the agreed design (why things are the way they are)
-- `docs/contracts.md` — the two data formats; code must match them exactly
+- `docs/contracts.md` — the data formats; code must match them exactly
+- `docs/conventions.md` — naming, layout, code style, prompts, tests
 - `docs/build-log.md` — shared running log; read the latest entries first
 
 ## Ownership
