@@ -4,8 +4,9 @@ page-indexed corpus every downstream agent cites.
 Writes four files into the run folder:
   manifest.json          Contract 1a - one entry per document read
   chunks.jsonl           Contract 1b - the only thing hunters may cite
-  facts.jsonl            Contract 1c - created EMPTY; structured facts (XBRL,
-                         IR workbooks) are a separate, deferred slice
+  facts.jsonl            Contract 1c - XBRL facts for the number-tie rule, keyed
+                         through CONCEPT_MAP; IR Excel workbooks (needed for
+                         foreign filers' quarterlies) are still deferred
   librarian_report.json  non-contract audit sidecar: which 6-K candidates were
                          scored and why one was chosen, which page numbers are
                          the document's own vs inferred, and coverage warnings
@@ -22,7 +23,7 @@ import sys
 import time
 import urllib.error
 import urllib.request
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 log = logging.getLogger(__name__)
@@ -87,6 +88,34 @@ _PAGE_FOOT_RE = re.compile(r"^(\d{1,4})$")
 _PAGE_HEAD_RE = re.compile(r"(?i)\bpage\s+(\d{1,4})\s*(?:of\s+\d{1,4})?\b")
 
 _last_request = 0.0
+
+# Hand-built US-GAAP <-> IFRS concept map: our metric key -> candidate XBRL tags in
+# preference order, first match wins. Hand-curated on purpose (architecture section 2,
+# "curate the small fixed things"): automation picks the wrong tag when a filer reports
+# several. The first five keys are the ones Partner B's merged hunters and scoring
+# already use, so they must keep these exact names. Metrics with no tag for a given
+# filer are logged as `unmapped_metric` rather than guessed.
+CONCEPT_MAP = {
+    "revenue": ["Revenues", "RevenueFromContractWithCustomerExcludingAssessedTax",
+                "Revenue"],
+    "trade_receivables": ["AccountsReceivableNetCurrent", "CurrentTradeReceivables",
+                          "TradeAndOtherCurrentReceivables"],
+    "inventory": ["InventoryNet", "Inventories"],
+    "operating_profit": ["OperatingIncomeLoss", "ProfitLossFromOperatingActivities"],
+    "net_profit": ["NetIncomeLoss", "ProfitLoss"],
+    "cost_of_sales": ["CostOfGoodsAndServicesSold", "CostOfRevenue", "CostOfSales"],
+    "gross_profit": ["GrossProfit"],
+    "research_development": ["ResearchAndDevelopmentExpense", "ResearchAndDevelopmentExpenseIFRS"],
+    "cash": ["CashAndCashEquivalentsAtCarryingValue", "CashAndCashEquivalents"],
+    "total_assets": ["Assets"],
+    "total_equity": ["StockholdersEquity", "Equity"],
+    "trade_payables": ["AccountsPayableCurrent", "TradeAndOtherCurrentPayables"],
+}
+
+# XBRL reports absolute amounts; Contract 1c carries millions, which is also the unit
+# the filing tables print - that equality is what the number-tie rule checks.
+FACT_SCALE = 1_000_000
+_SPAN_LABELS = [(80, 100, "Q"), (170, 190, "H"), (350, 380, "FY")]
 
 
 # --------------------------------------------------------------------------
@@ -404,6 +433,137 @@ def chunk_document(doc_id, document_html):
 
 
 # --------------------------------------------------------------------------
+# XBRL facts (Contract 1c)
+# --------------------------------------------------------------------------
+
+def _period_from_fact(row):
+    """Measurement period for one XBRL row, from its own dates.
+
+    Returns `FY2025`, `Q2 2026`, `H1 2026`, or None for a span we cannot label.
+
+    The row's `fy`/`fp` fields are deliberately ignored: they describe the filing,
+    not the measurement. Lilly's six-month revenue row carries `fp: Q2` while
+    actually covering H1, so trusting it would file the H1 figure under Q2 and the
+    number-tie would compare two different numbers.
+    """
+    end = row["end"]
+    start = row.get("start")
+    if not start:
+        # An instant: a balance-sheet item. A year-end instant belongs to the
+        # fiscal year; any other belongs to the quarter it closes. J&J's year ends
+        # 2025-12-28 and a 52/53-week year can spill into early January, so both
+        # late December and the first days of January count as a year end.
+        month, day = int(end[5:7]), int(end[8:10])
+        if month == 12:
+            return f"FY{end[:4]}"
+        if month == 1 and day <= 7:
+            return f"FY{int(end[:4]) - 1}"
+        return f"Q{_quarter(end)} {end[:4]}"
+    span = (date.fromisoformat(end) - date.fromisoformat(start)).days
+    for low, high, kind in _SPAN_LABELS:
+        if low <= span <= high:
+            if kind == "FY":
+                return f"FY{end[:4]}"
+            if kind == "H":
+                return f"H{1 if _quarter(end) <= 2 else 2} {end[:4]}"
+            return f"Q{_quarter(end)} {end[:4]}"
+    return None
+
+
+def _fact_period_key(fiscal_period):
+    """`Q2 2026` -> `2026Q2`, `H1 2026` -> `2026H1`, `FY2025` unchanged (for fact_id)."""
+    if fiscal_period.startswith("FY"):
+        return fiscal_period
+    label, year = fiscal_period.split()
+    return f"{year}{label}"
+
+
+def _xbrl_facts(ticker):
+    """Contract 1c facts for one ticker from SEC XBRL companyfacts.
+
+    Returns (facts, misses, skipped): the fact rows, the concept-map metrics this
+    filer does not tag, and a count of rows dropped for an unlabelable span or a
+    non-currency unit.
+    """
+    cik = CIKS[ticker][0]
+    payload = _sec_json(f"https://data.sec.gov/api/xbrl/companyfacts/CIK{cik:010d}.json")
+    taxonomies = {name: tags for name, tags in payload["facts"].items() if name != "dei"}
+
+    facts, misses, skipped = [], [], 0
+    for metric, candidates in CONCEPT_MAP.items():
+        entry = None
+        for tag in candidates:                     # preference order, first match wins
+            for taxonomy, tags in taxonomies.items():
+                if tag in tags:
+                    entry = (taxonomy, tag, tags[tag])
+                    break
+            if entry:
+                break
+        if entry is None:
+            misses.append({"metric": metric, "candidates_tried": candidates})
+            continue
+
+        taxonomy, tag, concept = entry
+        currencies = {unit: rows for unit, rows in concept["units"].items()
+                      if re.fullmatch(r"[A-Z]{3}", unit)}
+        skipped += sum(len(rows) for unit, rows in concept["units"].items()
+                       if unit not in currencies)   # shares, USD/shares, ratios
+        # `fact_id` carries no currency segment, so one reporting currency per metric
+        # keeps ids unique. No shortlist company currently reports a mapped metric in
+        # two currencies, but nothing guarantees that for a judge-picked live run.
+        if len(currencies) > 1:
+            primary = max(currencies, key=lambda u: len(currencies[u]))
+            skipped += sum(len(rows) for unit, rows in currencies.items() if unit != primary)
+            currencies = {primary: currencies[primary]}
+
+        best = {}
+        for unit, rows in currencies.items():
+            for row in rows:
+                period = _period_from_fact(row)
+                if period is None:
+                    skipped += 1
+                    continue
+                key = (period, unit)
+                # Restatements repeat a period; the newest filing wins.
+                if key not in best or row.get("filed", "") > best[key].get("filed", ""):
+                    best[key] = row
+        for (period, unit), row in sorted(best.items()):
+            facts.append({
+                "fact_id": f"{ticker}-xbrl-{metric}-{_fact_period_key(period)}",
+                "doc_id": f"{ticker}-XBRL",
+                "metric": metric,
+                "value": row["val"] / FACT_SCALE,
+                "unit": "millions",
+                "currency": unit,
+                "fiscal_period": period,
+                "period_end": row["end"],
+                "source_kind": "xbrl",
+            })
+        log.info("%s: %s -> %s:%s, %d facts", ticker, metric, taxonomy, tag, len(best))
+    return facts, misses, skipped
+
+
+def _xbrl_manifest_entry(ticker):
+    """The manifest row every facts.jsonl `doc_id` resolves to."""
+    cik, company = CIKS[ticker]
+    return {
+        "doc_id": f"{ticker}-XBRL",
+        "company": company,
+        "ticker": ticker,
+        "doc_type": "xbrl",
+        "fiscal_period": "",          # spans every period the company has tagged
+        "period_end": None,
+        "filed_date": None,
+        "url": f"https://data.sec.gov/api/xbrl/companyfacts/CIK{cik:010d}.json",
+        "accession": None,
+        "source": "live",
+        "collected_date": None,
+        "application_no": None,
+        "labeler_code": None,
+    }
+
+
+# --------------------------------------------------------------------------
 # document selection
 # --------------------------------------------------------------------------
 
@@ -649,17 +809,19 @@ def select_documents(ticker):
 # stage entry point
 # --------------------------------------------------------------------------
 
-def _write_corpus(run_dir, manifest, chunks, report):
+def _write_corpus(run_dir, manifest, chunks, facts, report):
     run_dir.mkdir(parents=True, exist_ok=True)
     with (run_dir / "manifest.json").open("w", encoding="utf-8") as fh:
         json.dump(manifest, fh, indent=2, ensure_ascii=False)
     with (run_dir / "chunks.jsonl").open("w", encoding="utf-8") as fh:
         for chunk in chunks:
             fh.write(json.dumps(chunk, ensure_ascii=False) + "\n")
-    # Contract 1 is a three-file set. facts.jsonl exists so Partner B's readers
-    # do not crash on a missing path, and stays empty because fabricating a
+    # facts.jsonl is written even when empty, so Partner B's readers never hit a
+    # missing path. An empty file means XBRL had nothing for this company - a
     # placeholder fact would break the no-fact-from-memory rule.
-    (run_dir / "facts.jsonl").write_text("", encoding="utf-8")
+    with (run_dir / "facts.jsonl").open("w", encoding="utf-8") as fh:
+        for fact in facts:
+            fh.write(json.dumps(fact, ensure_ascii=False) + "\n")
     with (run_dir / "librarian_report.json").open("w", encoding="utf-8") as fh:
         json.dump(report, fh, indent=2, ensure_ascii=False)
 
@@ -698,31 +860,59 @@ def build_corpus(ticker, run_dir):
                  entry["doc_id"], len(doc_chunks),
                  len(provenance["verified_pages"]), len(provenance["inferred_pages"]))
 
-    warnings.append("facts.jsonl is empty: structured financial facts (XBRL, IR "
-                    "workbooks) are a deferred slice, so the Fact Checker's "
-                    "number-tie rule cannot run against this corpus yet")
+    try:
+        facts, misses, skipped = _xbrl_facts(ticker)
+    except Exception as exc:
+        # No XBRL is a coverage gap, not a reason to lose the filings corpus.
+        facts, misses, skipped = [], [], 0
+        warnings.append(f"XBRL companyfacts unavailable ({exc}); facts.jsonl is empty "
+                        "and the number-tie rule cannot run for this company")
+    if facts:
+        manifest.append(_xbrl_manifest_entry(ticker))
+    else:
+        warnings.append("facts.jsonl is empty: no XBRL facts for this company, so the "
+                        "Fact Checker's number-tie rule cannot run against this corpus")
+    for miss in misses:
+        warnings.append(f"unmapped_metric {miss['metric']}: this filer tags none of "
+                        f"{', '.join(miss['candidates_tried'])}; findings on it fall "
+                        "back to the filing table and cap at Medium confidence")
+    quarterly = {f["metric"] for f in facts if not f["fiscal_period"].startswith("FY")}
+    if facts and not quarterly:
+        warnings.append("XBRL has annual facts only for this company (typical of foreign "
+                        "filers); quarterly figures need the deferred IR-workbook slice "
+                        "before they can reach High confidence")
     for warning in warnings:
         log.warning("coverage: %s", warning)
 
+    per_metric = {}
+    for fact in facts:
+        per_metric[fact["metric"]] = per_metric.get(fact["metric"], 0) + 1
     report = {
         "ticker": ticker,
         "generated": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-        "scope": "EDGAR periodic filings for the subject company only",
+        "scope": "EDGAR periodic filings plus XBRL companyfacts for the subject company",
         "selection": audit,
         "page_attribution": pages,
+        "facts": {
+            "total": len(facts),
+            "per_metric": per_metric,
+            "unmapped_metrics": misses,
+            "rows_skipped_unlabelable_or_non_currency": skipped,
+        },
         "coverage_warnings": warnings,
-        "deferred": ["facts.jsonl (XBRL + IR workbooks)", "DailyMed labels",
-                     "Orange/Purple Book", "rival filings", "transcripts"],
+        "deferred": ["facts.jsonl from IR Excel workbooks (foreign quarterlies)",
+                     "DailyMed labels", "Orange/Purple Book", "rival filings",
+                     "transcripts"],
     }
-    _write_corpus(run_dir, manifest, chunks, report)
+    _write_corpus(run_dir, manifest, chunks, facts, report)
     return report
 
 
 async def run(run_dir):
     """Build the Contract 1 corpus for the ticker named by the run folder.
 
-    Reads nothing; writes manifest.json, chunks.jsonl, an empty facts.jsonl, and
-    the librarian_report.json audit sidecar into `run_dir`.
+    Reads nothing; writes manifest.json, chunks.jsonl, facts.jsonl, and the
+    librarian_report.json audit sidecar into `run_dir`.
     """
     ticker = Path(run_dir).name.split("-")[0]
     return await asyncio.to_thread(build_corpus, ticker, Path(run_dir))
