@@ -12,3 +12,4 @@ The pitch deck and How-we-did-it report are built from this file.
 - 2026-10-17 [Claude] wrong: probe reported Pfizer/J&J prior-year quarters missing; actually 52/53-week fiscal quarters (2026-06-28 vs 2025-06-29). Caught by listing their 10-Q dates.
 - 2026-10-18 [Claude] decision: two data contracts (corpus, finding) defined in docs/contracts.md; repo files are the shared memory between both partners' Claude sessions.
 - 2026-10-18 [Claude] wrong: contracts.md example labeled DKK 71,949m receivables as FY2025; it is 31 Dec 2024 (FY2024). Caught on self-review before commit.
+- 2026-10-18 [B] decision: no direct commits to main; branch per change named <type>/<area>-<short-description>, merged via PR (rules in CLAUDE.md).
