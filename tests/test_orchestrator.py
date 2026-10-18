@@ -32,6 +32,7 @@ class OrchestratorTestCase(unittest.TestCase):
             (self.corpus / name).write_text("[]\n", encoding="utf-8")
         (self.corpus / "manifest.json").write_text('[{"ticker": "NVO"}]', encoding="utf-8")
         self.calls, self.fail, self.not_built = [], {}, set(NOT_BUILT)
+        self.loaded = []
         self.leads = [{"finding_id": "F-001"}]
         self.synthesis_status = self.ceo_status = "ok"
         self.repo_runs_before = set(orchestrator.RUNS_DIR.glob("*"))
@@ -41,6 +42,7 @@ class OrchestratorTestCase(unittest.TestCase):
         self.addCleanup(self.tmp.cleanup)
 
     def fake_load(self, module):
+        self.loaded.append(module)
         if module in self.not_built:
             return None
 
@@ -92,13 +94,30 @@ class StartTests(OrchestratorTestCase):
         self.assertEqual(status["phase"], "awaiting_human")
         self.assertEqual(status["ticker"], "NVO")
         self.assertEqual(list(status["stages"]),
-                         ["corpus", "hunters", "dedup", "fact_checker", "quant", "priced_in",
-                          "scoring", "peer", "scoring_after_peer"])
-        for name in ("fact_checker", "quant", "priced_in", "peer"):
+                         ["corpus", "hunters", "dedup", "fact_checker", "quant", "scoring",
+                          "scoring_after_peer"])
+        self.assertEqual(set(status["disabled"]), {"priced_in", "peer"})
+        for name in ("fact_checker", "quant"):
             self.assertEqual((status["stages"][name]["status"], status["stages"][name]["error"]),
                              ("skipped", "not built"))
         self.assertEqual(status["stages"]["dedup"]["status"], "ok")
         self.assertFalse((run_dir / "run.json").exists())
+
+    def test_disabled_stages_are_never_loaded_or_run(self):
+        self.not_built = set()  # even with priced_in.py and peer.py on main
+        status = self.status(self.start())
+        self.assertNotIn("priced_in", self.loaded)
+        self.assertNotIn("peer", self.loaded)
+        self.assertNotIn("priced_in", status["stages"])
+        self.assertNotIn("peer", status["stages"])
+        self.assertIn("not built", status["disabled"]["peer"])
+        self.assertEqual(status["phase"], "awaiting_human")
+
+    def test_removing_a_disabled_entry_switches_the_stage_back_on(self):
+        with mock.patch.dict(orchestrator.DISABLED_STAGES, clear=True):
+            status = self.status(self.start())
+        self.assertEqual(status["stages"]["priced_in"]["status"], "skipped")
+        self.assertEqual(status["disabled"], {})
 
     def test_built_partner_stages_run_in_order(self):
         self.not_built = {"priced_in", "peer", "comparison"}

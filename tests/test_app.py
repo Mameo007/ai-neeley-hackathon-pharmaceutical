@@ -136,6 +136,13 @@ class HelperTests(AppTestCase):
         self.assertEqual(app.stage_problems(status),
                          [("b", "skipped", "x"), ("c", "degraded", "y")])
 
+    def test_disabled_stages_raise_no_banner(self):
+        # An older run recorded them as skipped; a real skip next to them still warns.
+        status = {"stages": {"priced_in": {"status": "skipped", "error": "not built"},
+                             "peer": {"status": "skipped", "error": "not built"},
+                             "comparison": {"status": "skipped", "error": "not built"}}}
+        self.assertEqual(app.stage_problems(status), [("comparison", "skipped", "not built")])
+
 
 class AgentCardTests(AppTestCase):
     def test_every_pipeline_stage_and_hunter_has_a_plain_name(self):
@@ -154,14 +161,21 @@ class AgentCardTests(AppTestCase):
         ok = {"status": "ok"}
         cards = self.cards({"corpus": ok, "hunters": ok, "dedup": {"status": "running"},
                             "priced_in": {"status": "skipped", "error": "not built"}})
+        # Priced-In Detector and Peer Agent are in orchestrator.DISABLED_STAGES: no card.
         self.assertEqual(list(cards), ["Librarian", "The hunters", "Dedup", "Fact Checker",
-                                       "Quant", "Priced-In Detector", "Scoring", "Peer Agent"])
+                                       "Quant", "Scoring"])
+        self.assertEqual(cards["Scoring"]["job"], "Ranks findings by their earnings impact.")
         self.assertEqual([(c["status"], c["state"]) for c in cards.values()][:3],
                          [("ok", "✓"), ("ok", "✓"), ("running", "working")])
         self.assertEqual(cards["Quant"]["state"], "waiting")
-        self.assertEqual(cards["Priced-In Detector"]["state"], "not built")
         self.assertIn("Redliner", cards["The hunters"]["who"])
-        self.assertAlmostEqual(app.progress_fraction(list(cards.values())), 3 / 8)
+        self.assertAlmostEqual(app.progress_fraction(list(cards.values())), 2 / 6)
+
+    def test_reenabled_stage_gets_its_card_back(self):
+        with mock.patch.dict(orchestrator.DISABLED_STAGES, clear=True):
+            cards = self.cards({"priced_in": {"status": "skipped", "error": "not built"}})
+        self.assertEqual(cards["Priced-In Detector"]["state"], "not built")
+        self.assertIn("Peer Agent", cards)
 
     def test_scoring_card_spans_both_scoring_stages(self):
         self.assertEqual(self.cards({"scoring": {"status": "ok"}})["Scoring"]["status"],
@@ -181,14 +195,14 @@ class AgentCardTests(AppTestCase):
         self.assertEqual((cards["The hunters"]["state"], cards["Dedup"]["state"]),
                          ("stopped", "not reached"))
         self.assertIn("Stopped mid-step", cards["The hunters"]["problem"])
-        self.assertAlmostEqual(app.progress_fraction(list(cards.values())), 1 / 8)
+        self.assertAlmostEqual(app.progress_fraction(list(cards.values())), 1 / 6)
         paused = {"phase": "awaiting_human",
                   "stages": {n: {"status": "ok"} for n in app.STAGE_AGENTS
                              if n not in app.FINISH_STAGE_NAMES}}
         every = app.agent_cards(paused, run_dir, live=False, every=True)
         self.assertEqual({c["state"] for c in every if c["group"] == "After your pick"},
                          {"waiting"})  # still ahead, not "not reached"
-        self.assertAlmostEqual(app.progress_fraction(every), 8 / 12)
+        self.assertAlmostEqual(app.progress_fraction(every), 6 / 10)
 
     def test_hunter_discovery_tolerates_bad_rows(self):
         run_dir = self.make_run("NVO-20261018-0100", "running", "x", stages={})
@@ -289,6 +303,21 @@ class ResultTests(AppTestCase):
         self.assertEqual([k for k, _ in res["ceo"]["fields"]],
                          ["The move", "Trade-off", "What would prove us wrong", "Why it works"])
         self.assertEqual(res["priced_in"], "partly priced in")
+        self.assertIs(res["market_assessed"], True)
+
+    def test_result_model_without_a_priced_in_check(self):
+        run_dir = self.make_run("NVO-20261018-0100", "done", "x", done=True)
+        findings = json.loads((run_dir / "findings.json").read_text())
+        for f in findings:
+            for r in f.get("reasonings") or []:
+                r["priced_in"] = None
+        (run_dir / "findings.json").write_text(json.dumps(findings), encoding="utf-8")
+        res = app.result_model(run_dir)
+        self.assertIsNone(res["priced_in"])  # never "market: not priced in"
+        self.assertIs(res["market_assessed"], False)
+        page = html_text(PageTests.page(self, "NVO-20261018-0100"))
+        self.assertIn("market pricing not assessed", page)
+        self.assertNotIn("market: ", page)
 
     def test_result_page_failure_paths(self):
         run_dir = self.make_run("NVO-20261018-0100", "done", "x", done=True)
@@ -321,7 +350,7 @@ class ResultTests(AppTestCase):
         self.assertEqual(app.why_line(r),
                          "Moves earnings per share by about 4.5%; no matching news stories found.")
         self.assertEqual(app.why_line({"materiality": None, "priced_in_hits": None}),
-                         "Impact not sized yet; not yet checked against the news.")
+                         "Impact not sized yet; market pricing not assessed.")
         self.assertIn("already in 1 news story", app.why_line({"materiality": 1,
                                                                 "priced_in_hits": 1}))
         out = app.quote_html("$1.2 <b>bn</b>\nnext", "src & co")

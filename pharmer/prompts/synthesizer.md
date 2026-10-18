@@ -30,6 +30,10 @@ rule against the ids you cite (a cited finding id stands for all its reasonings)
 - `priced_in`: every cited reasoning has hits.
 - `partly_priced_in`: some cited reasonings have hits, others do not.
 
+If every cited reasoning's `priced_in_hits` is null, nobody checked the market: still set
+`priced_in_call` to `not_priced_in`, but do not say in the verdict whether the market has priced
+it in, and do not say it is overlooked, unnoticed or a surprise to investors.
+
 ## Citations
 
 - Cite the ids your verdict rests on: a reasoning id (`F-003-a`) or a finding id (`F-003`). Use
