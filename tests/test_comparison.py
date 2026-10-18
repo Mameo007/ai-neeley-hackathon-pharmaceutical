@@ -279,8 +279,8 @@ class IoMatrixTests(StageTestCase):
         self.assertEqual(len(requests), 3)
 
     def test_client_setup_error_never_raises(self):
-        self.run_stage({"Brand A": [TypeError("Could not resolve authentication method")],
-                        "Brand B": [reply(GOOD_B)]})
+        no_key = TypeError("Could not resolve authentication method")
+        self.run_stage({"Brand A": [no_key, no_key], "Brand B": [reply(GOOD_B)]})
         grid, _ = self.grid()
         self.assertEqual([grid[label][0] for label in LABELS], [ND] * 5)
         record = self.output("comparison_sources.json")["columns"]["Brand A"]
