@@ -153,15 +153,30 @@ class AgentCardTests(AppTestCase):
     def test_card_states_follow_the_stages(self):
         ok = {"status": "ok"}
         cards = self.cards({"corpus": ok, "hunters": ok, "dedup": {"status": "running"},
-                            "priced_in": {"status": "skipped", "error": "not built"}})
+                            "priced_in": {"status": "disabled", "reason": "not built"}})
+        # The two disabled agents are not this run's agents, so they are not cards at all.
         self.assertEqual(list(cards), ["Librarian", "The hunters", "Dedup", "Fact Checker",
-                                       "Quant", "Priced-In Detector", "Scoring", "Peer Agent"])
+                                       "Quant", "Scoring"])
         self.assertEqual([(c["status"], c["state"]) for c in cards.values()][:3],
                          [("ok", "✓"), ("ok", "✓"), ("running", "working")])
         self.assertEqual(cards["Quant"]["state"], "waiting")
-        self.assertEqual(cards["Priced-In Detector"]["state"], "not built")
         self.assertIn("Redliner", cards["The hunters"]["who"])
-        self.assertAlmostEqual(app.progress_fraction(list(cards.values())), 3 / 8)
+        self.assertAlmostEqual(app.progress_fraction(list(cards.values())), 2 / 6)
+
+    def test_disabled_agents_are_not_cards_and_raise_no_warning(self):
+        status = {"stages": {n: {"status": "disabled", "error": None,
+                                 "reason": orchestrator.DISABLED_STAGES[n]}
+                             for n in orchestrator.DISABLED_STAGES}}
+        names = [c["name"] for c in app.agent_cards(status, self.runs, every=True)]
+        for stage in orchestrator.DISABLED_STAGES:
+            self.assertNotIn(app.STAGE_AGENTS[stage][1], names)
+        # and no yellow "this agent did not succeed" banner for them
+        self.assertEqual(app.stage_problems(status), [])
+
+    def test_a_genuinely_skipped_stage_still_warns(self):
+        status = {"stages": {"comparison": {"status": "skipped", "error": "not built"}}}
+        self.assertEqual(app.stage_problems(status),
+                         [("comparison", "skipped", "not built")])
 
     def test_scoring_card_spans_both_scoring_stages(self):
         self.assertEqual(self.cards({"scoring": {"status": "ok"}})["Scoring"]["status"],
@@ -181,14 +196,14 @@ class AgentCardTests(AppTestCase):
         self.assertEqual((cards["The hunters"]["state"], cards["Dedup"]["state"]),
                          ("stopped", "not reached"))
         self.assertIn("Stopped mid-step", cards["The hunters"]["problem"])
-        self.assertAlmostEqual(app.progress_fraction(list(cards.values())), 1 / 8)
+        self.assertAlmostEqual(app.progress_fraction(list(cards.values())), 1 / 6)
         paused = {"phase": "awaiting_human",
                   "stages": {n: {"status": "ok"} for n in app.STAGE_AGENTS
                              if n not in app.FINISH_STAGE_NAMES}}
         every = app.agent_cards(paused, run_dir, live=False, every=True)
         self.assertEqual({c["state"] for c in every if c["group"] == "After your pick"},
                          {"waiting"})  # still ahead, not "not reached"
-        self.assertAlmostEqual(app.progress_fraction(every), 8 / 12)
+        self.assertAlmostEqual(app.progress_fraction(every), 6 / 10)
 
     def test_hunter_discovery_tolerates_bad_rows(self):
         run_dir = self.make_run("NVO-20261018-0100", "running", "x", stages={})

@@ -54,6 +54,17 @@ shows as *degraded*, with the reason.
 `start` stops at the human pause and prints the exact `finish` command. Each run's files,
 including `report.pdf` and `pipeline.json` (stage status and timings), are in `runs/<run_id>/`.
 
+## Deploy on Render
+
+Create a Render Blueprint from this repository and select the branch containing
+`render.yaml`. It configures a Starter web service and a 1 GB persistent disk
+(paid Render resources). Enter `ANTHROPIC_API_KEY` and `PHARMER_SEC_UA` when
+prompted; keep secrets out of Git. Runs, PDFs, and API usage logs are stored under
+`/var/data` and survive deploys and restarts. Existing local runs are not uploaded.
+In-flight research jobs stop when the service restarts; completed files persist.
+
+The health endpoint is `/_stcore/health`. Local startup remains unchanged.
+
 ## Tests
 
 ```bash
