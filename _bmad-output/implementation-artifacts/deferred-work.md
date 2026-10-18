@@ -74,3 +74,15 @@ existing entries.
 - source_spec: `_bmad-output/implementation-artifacts/spec-synthesizer-ceo-move.md`
   summary: Synthesizer should ignore a comparison.json that reports a failed or empty grid once the Comparison Builder defines its output (status field).
   evidence: unverified (medium if true) — grid_used is `comparison.json exists and parses`; the grid's own shape is not specified yet, so a failed-state grid would be sent as data.
+- source_spec: `_bmad-output/implementation-artifacts/spec-report-pdf.md`
+  summary: Show Quant basis (formula, FX), confidence_reason, peer status and priced-in evidence in the report findings.
+  evidence: Blind review — the report prints eps_pct/usd_m and hit counts without their basis; §4.10 doesn't list them, so it was left out of step 4a.
+- source_spec: `_bmad-output/implementation-artifacts/spec-report-pdf.md`
+  summary: Footnote comparison cells and cap table width once the Comparison Builder fixes comparison.json's shape.
+  evidence: Blind review — cells print uncited; shape is still a proposal.
+- source_spec: `_bmad-output/implementation-artifacts/spec-report-pdf.md`
+  summary: Add report date, page numbers and an AI-generated/not-investment-advice disclaimer to the PDF.
+  evidence: Blind review — standard research-note pieces missing; not in §4.10's list.
+- source_spec: `_bmad-output/implementation-artifacts/spec-report-pdf.md`
+  summary: Mark footnotes whose page is an inferred ordinal rather than the filing's printed page.
+  evidence: Librarian keeps this in librarian_report.json (not Contract 1); the report prints p.N either way. Needs a contract field.
