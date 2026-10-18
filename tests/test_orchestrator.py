@@ -150,7 +150,9 @@ class StartTests(OrchestratorTestCase):
         self.assertEqual(code, 0)
         run_dir = next(self.runs.iterdir())
         self.assertIn("F-001  [Recommended]", out)
-        self.assertIn(f"orchestrator.py finish {run_dir} --needle F-001 --product NAME", out)
+        self.assertIn(f"orchestrator.py finish {run_dir} --needle F-001 --product NAME "
+                      "--rivals NAME[,NAME]", out)
+        self.assertIn("name the rivals", out)
         with self.assertRaises(SystemExit) as cm:
             orchestrator.main([])
         self.assertEqual(cm.exception.code, 2)
@@ -230,6 +232,37 @@ class FinishTests(OrchestratorTestCase):
         self.finish(self.run_dir, needle="F-003", product="Brand B")
         self.finish(self.run_dir, needle="F-001")
         self.assertEqual(self.run_json(), {"sharpest_needle": "F-001", "product": "Brand B"})
+
+    def test_rivals_stored_kept_and_cleared(self):
+        self.finish(self.run_dir, needle="F-003", product="Brand B",
+                    rivals=" Brand C, ,Brand D,Brand C")
+        self.assertEqual(self.run_json()["rivals"], ["Brand C", "Brand D"])
+        self.finish(self.run_dir, needle="F-003")  # None keeps the stored list
+        self.assertEqual(self.run_json()["rivals"], ["Brand C", "Brand D"])
+        self.finish(self.run_dir, needle="F-003", rivals=["Brand E"])
+        self.assertEqual(self.run_json()["rivals"], ["Brand E"])
+        self.finish(self.run_dir, needle="F-003", rivals="")
+        self.assertNotIn("rivals", self.run_json())
+        # Same normalizer as the stage: the product and case-insensitive repeats are dropped.
+        self.finish(self.run_dir, needle="F-003", rivals="brand b, Brand C,brand c")
+        self.assertEqual(self.run_json()["rivals"], ["Brand C"])
+
+    def test_cli_rivals_flag_reaches_run_json(self):
+        code, _ = self.main(["finish", str(self.run_dir), "--needle", "F-003", "--product",
+                             "Brand B", "--rivals", "Brand C,Brand D"])
+        self.assertEqual(code, 0)
+        self.assertEqual(self.run_json(), {"sharpest_needle": "F-003", "product": "Brand B",
+                                           "rivals": ["Brand C", "Brand D"]})
+
+    def test_rerun_clears_the_previous_comparison_sources(self):
+        self.not_built.discard("comparison")
+        self.finish(self.run_dir, needle="F-003")
+        (self.run_dir / "comparison_sources.json").write_text("{}", encoding="utf-8")
+        self.fail["comparison"] = ValueError("boom")
+        self.finish(self.run_dir, needle="F-003")
+        self.assertFalse((self.run_dir / "comparison_sources.json").exists())
+        self.assertEqual(self.status(self.run_dir)["stages"]["comparison"]["status"], "failed")
+        self.assertEqual(self.status(self.run_dir)["phase"], "done")  # optional stage
 
     def test_no_needle_leaves_the_fallback_to_ceo_move(self):
         self.finish(self.run_dir)

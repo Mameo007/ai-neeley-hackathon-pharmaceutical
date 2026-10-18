@@ -5,6 +5,7 @@ documents use the git-ignored data/sample/NVO/_raw/ cache and are skipped when i
 
 Run: .venv/bin/python -m unittest tests.test_build_sample_corpus
 """
+import contextlib
 import importlib.util
 import json
 import shutil
@@ -21,8 +22,13 @@ _spec.loader.exec_module(bsc)
 
 COMMITTED = REPO_ROOT / "data" / "sample" / "NVO"
 REAL_RAW = COMMITTED / "_raw"
-HAVE_RAW = all((REAL_RAW / name).is_file() for name in bsc.CACHE_FILES)
-needs_raw = unittest.skipUnless(HAVE_RAW, "no data/sample/NVO/_raw cache on this machine")
+LABEL_FILES = [name for label in bsc.LABELS for name in bsc._label_files(label)]
+SEC_FILES = [name for name in bsc.CACHE_FILES if name not in LABEL_FILES]
+# Two gates, so a machine holding only the SEC cache still runs the 6-K replay tests.
+needs_raw = unittest.skipUnless(all((REAL_RAW / n).is_file() for n in SEC_FILES),
+                                "no SEC files in data/sample/NVO/_raw on this machine")
+needs_label_raw = unittest.skipUnless(all((REAL_RAW / n).is_file() for n in LABEL_FILES),
+                                      "no DailyMed label files in data/sample/NVO/_raw")
 
 
 def _no_network(url):
@@ -39,6 +45,29 @@ def _replay_sec(url):
         if url == bsc._doc_url(k["accession"], k["document"]):
             return (REAL_RAW / k["document"]).read_bytes()
     raise AssertionError(f"unknown url {url}")
+
+
+def _replay_dailymed(url):
+    """Serve the cached DailyMed search, NDC list or SPL XML that a real fetch produced."""
+    for label in bsc.LABELS:
+        spls_name, ndcs_name, xml_name = bsc._label_files(label)
+        if url == bsc._spls_url(label["application_no"]):
+            return (REAL_RAW / spls_name).read_bytes()
+        ndcs = json.loads((REAL_RAW / ndcs_name).read_text(encoding="utf-8"))
+        for setid, codes in ndcs.items():
+            if url == bsc._ndcs_url(setid):
+                return json.dumps({"data": {"ndcs": [{"ndc": c} for c in codes]}}).encode()
+            if url == bsc._spl_url(setid):
+                return (REAL_RAW / xml_name).read_bytes()
+    raise AssertionError(f"unknown url {url}")
+
+
+def _offline():
+    """No SEC and no DailyMed request may leave the process."""
+    stack = contextlib.ExitStack()
+    for name in ("_sec_get", "_dailymed_get"):
+        stack.enter_context(mock.patch.object(bsc, name, side_effect=_no_network))
+    return stack
 
 
 class _TempDirs(unittest.TestCase):
@@ -59,8 +88,10 @@ class _TempDirs(unittest.TestCase):
 
 class HappyPathTest(_TempDirs):
     @needs_raw
+    @needs_label_raw
     def test_fetch_caches_raw_and_writes_outputs(self):
-        with mock.patch.object(bsc, "_sec_get", side_effect=_replay_sec):
+        with mock.patch.object(bsc, "_sec_get", side_effect=_replay_sec), \
+                mock.patch.object(bsc, "_dailymed_get", side_effect=_replay_dailymed):
             self.assertEqual(bsc.main([]), 0)
         for name in bsc.CACHE_FILES:
             self.assertTrue((self.raw / name).is_file(), name)
@@ -79,9 +110,10 @@ class HappyPathTest(_TempDirs):
 
 class FromCacheTest(_TempDirs):
     @needs_raw
+    @needs_label_raw
     def test_rebuild_is_byte_identical_and_offline(self):
         shutil.copytree(REAL_RAW, self.raw)
-        with mock.patch.object(bsc, "_sec_get", side_effect=_no_network):
+        with _offline():
             bsc.main(["--from-cache"])
             first = self._snapshot()
             bsc.main(["--from-cache"])
@@ -92,7 +124,7 @@ class FromCacheTest(_TempDirs):
     def test_missing_cache_file_raises_and_leaves_outputs(self):
         self.raw.mkdir(parents=True)
         (self.out / "manifest.json").write_text("old", encoding="utf-8")
-        with mock.patch.object(bsc, "_sec_get", side_effect=_no_network):
+        with _offline():
             with self.assertRaises(FileNotFoundError):
                 bsc.main(["--from-cache"])
         self.assertEqual((self.out / "manifest.json").read_text(encoding="utf-8"), "old")
@@ -145,12 +177,95 @@ class FetchFailureTest(_TempDirs):
                 raise RuntimeError("curl exit 22")
             return b"{}"
 
-        with mock.patch.object(bsc, "_sec_get", side_effect=flaky):
+        with mock.patch.object(bsc, "_sec_get", side_effect=flaky), \
+                mock.patch.object(bsc, "_dailymed_get", side_effect=_no_network):
             with self.assertRaises(RuntimeError):
                 bsc.main([])
         self.assertEqual(self._snapshot(), before)
         self.assertEqual(sorted(p.name for p in self.out.iterdir()),
                          sorted(["_raw", *bsc.OUTPUT_FILES]))
+
+
+def _search(*rows):
+    return {"data": [{"setid": s, "title": f"T {s}", "published_date": "Jun 10, 2026",
+                      "spl_version": 1} for s in rows], "metadata": {"next_page_url": "null"}}
+
+
+class LabelRuleTest(unittest.TestCase):
+    """The §4.0 label rule: keep SPLs whose NDCs all carry the allowlisted labeler code."""
+
+    def test_repackager_with_same_application_is_dropped(self):
+        ndcs = {"own": ["0169-4130-01", "0169-4132-11"], "repack": ["50090-1234-0"]}
+        chosen = bsc.select_spl(_search("repack", "own"), ndcs, "0169")
+        self.assertEqual(chosen["setid"], "own")
+
+    def test_zero_or_several_survivors_stop_the_build(self):
+        with self.assertRaises(ValueError):
+            bsc.select_spl(_search("repack"), {"repack": ["50090-1234-0"]}, "0169")
+        with self.assertRaises(ValueError) as cm:
+            bsc.select_spl(_search("a", "b"), {"a": ["0169-1-1"], "b": ["0169-2-2"]}, "0169")
+        self.assertIn("T a", str(cm.exception))
+
+    def test_mixed_labelers_and_no_ndcs_are_dropped(self):
+        ndcs = {"mixed": ["0169-1-1", "50090-1-1"], "empty": [], "own": ["0169-2-2"]}
+        chosen = bsc.select_spl(_search("mixed", "empty", "own"), ndcs, "0169")
+        self.assertEqual(chosen["setid"], "own")
+
+    def test_spl_sections_become_pages(self):
+        ns = 'xmlns="urn:hl7-org:v3"'
+        xml = f"""<document {ns}><effectiveTime value="20260601"/>
+          <setId root="own"/><versionNumber value="1"/>
+          <component><structuredBody>
+            <component><section><code code="48780-1"/><subject><manufacturedProduct>
+              <manufacturedProduct><code code="0169-4130" codeSystem="2.16.840.1.113883.6.69"/>
+              <approval><id extension="NDA209637"/></approval>
+              </manufacturedProduct></manufacturedProduct></subject></section></component>
+            <component><section><code code="34066-1"/><title>WARNING: X</title>
+              <text><paragraph>Risk <content>of</content> tumors.</paragraph></text>
+            </section></component>
+            <component><section><code code="34068-7"/><title>2 DOSAGE</title>
+              <component><section><title>2.1 Start</title><text>
+                <list><item>Once weekly.</item><item>Any time.</item></list>
+                <table><tbody><tr><td>Dose</td><td>Volume</td></tr>
+                <tr><td>0.25 mg</td><td>0.5 mL</td></tr></tbody></table>
+              </text></section></component>
+            </section></component>
+            <component><section><code code="42231-1"/><title>Medication Guide</title>
+              <text><paragraph>Lay text.</paragraph></text></section></component>
+          </structuredBody></component></document>""".encode()
+        label = {"product": "ozempic", "application_no": "NDA209637", "labeler_code": "0169"}
+        pages, effective = bsc.parse_label(xml, label, {"setid": "own", "spl_version": 1})
+        self.assertEqual(effective, "2026-06-01")
+        self.assertEqual([(p["page"], p["section"]) for p in pages],
+                         [(1, "WARNING: X"), (2, "2 DOSAGE")])
+        chunks = bsc.build_chunks("NVO-LABEL-OZEMPIC", pages)
+        self.assertEqual([c["chunk_id"] for c in chunks],
+                         ["NVO-LABEL-OZEMPIC-p1-c01", "NVO-LABEL-OZEMPIC-p2-c01",
+                          "NVO-LABEL-OZEMPIC-p2-c02"])
+        self.assertEqual(chunks[0]["text"], "WARNING: X\nRisk of tumors.")
+        self.assertEqual(chunks[1]["text"], "2 DOSAGE\n2.1 Start\nOnce weekly.\nAny time.")
+        self.assertTrue(chunks[2]["is_table"])
+        self.assertEqual(chunks[2]["section"], "2 DOSAGE")
+        with self.assertRaises(ValueError):  # another labeler's NDC in the XML
+            bsc.parse_label(xml, {**label, "labeler_code": "0002"},
+                            {"setid": "own", "spl_version": 1})
+        with self.assertRaises(ValueError):  # not the version the search chose
+            bsc.parse_label(xml, label, {"setid": "own", "spl_version": 2})
+        with self.assertRaises(ValueError):  # filed under another application
+            bsc.parse_label(xml, {**label, "application_no": "NDA000000"},
+                            {"setid": "own", "spl_version": 1})
+
+    def test_paged_search_stops_before_any_ndc_fetch(self):
+        search = _search("own")
+        search["metadata"]["next_page_url"] = (
+            "https://dailymed.nlm.nih.gov/dailymed/services/v2/spls.json?page=2")
+        with tempfile.TemporaryDirectory() as tmp, \
+                mock.patch.object(bsc, "_dailymed_get",
+                                  return_value=json.dumps(search).encode()) as get:
+            with self.assertRaises(ValueError):
+                bsc.fetch_label(Path(tmp), bsc.LABELS[0])
+            self.assertEqual(get.call_count, 1)
+            self.assertEqual(list(Path(tmp).iterdir()), [])
 
 
 @needs_raw

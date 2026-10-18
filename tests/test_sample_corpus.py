@@ -62,16 +62,32 @@ def _is_amount_line(line):
 class ManifestTest(unittest.TestCase):
     def test_rows_have_contract_keys_and_enums(self):
         self.assertEqual([m["doc_id"] for m in MANIFEST],
-                         ["NVO-6K-2026Q2", "NVO-6K-2025Q2", "NVO-XBRL"])
+                         ["NVO-6K-2026Q2", "NVO-6K-2025Q2", "NVO-XBRL", "NVO-LABEL-OZEMPIC",
+                          "LLY-LABEL-MOUNJARO"])
         for m in MANIFEST:
             self.assertEqual(set(m), MANIFEST_KEYS, m["doc_id"])
             self.assertIn(m["doc_type"], DOC_TYPES)
             self.assertIn(m["source"], {"live", "pre-collected"})
             if m["source"] == "pre-collected":
                 self.assertRegex(m["collected_date"], DATE_RE)
-            self.assertIsNone(m["application_no"])
-            self.assertIsNone(m["labeler_code"])
-            self.assertEqual(m["ticker"], "NVO")
+            if m["doc_type"] != "label":  # application_no / labeler_code are label-only
+                self.assertIsNone(m["application_no"])
+                self.assertIsNone(m["labeler_code"])
+                self.assertEqual(m["ticker"], "NVO")
+
+    def test_label_rows(self):
+        expected = {"NVO-LABEL-OZEMPIC": ("NVO", "NDA209637", "0169"),
+                    "LLY-LABEL-MOUNJARO": ("LLY", "NDA215866", "0002")}
+        for doc_id, (ticker, application_no, labeler) in expected.items():
+            m = DOCS[doc_id]
+            self.assertEqual(m["doc_type"], "label")
+            self.assertEqual((m["ticker"], m["application_no"], m["labeler_code"]),
+                             (ticker, application_no, labeler))
+            self.assertRegex(m["period_end"], DATE_RE)
+            self.assertRegex(m["filed_date"], DATE_RE)
+            self.assertGreaterEqual(m["filed_date"], m["period_end"])
+            self.assertRegex(m["url"], r"^https://dailymed\.nlm\.nih\.gov/dailymed/services/v2/"
+                                       r"spls/[0-9a-f-]{36}\.xml$")
 
     def test_six_k_provenance(self):
         expected = {"NVO-6K-2026Q2": ("2026-06-30", "2026-08-04", "Q2 2026"),
@@ -149,6 +165,29 @@ class ChunksTest(unittest.TestCase):
         self.assertTrue(header)
         for c in tables[1:]:
             self.assertEqual(c["text"].split("\n")[:len(header)], header, c["chunk_id"])
+
+
+class LabelChunksTest(unittest.TestCase):
+    def test_pages_are_section_ordinals_with_titles(self):
+        for doc_id in ("NVO-LABEL-OZEMPIC", "LLY-LABEL-MOUNJARO"):
+            chunks = _chunks(doc_id)
+            pages = sorted({c["page"] for c in chunks})
+            self.assertEqual(pages, list(range(1, len(pages) + 1)), doc_id)
+            sections = {}
+            for c in chunks:
+                sections.setdefault(c["page"], set()).add(c["section"])
+            self.assertTrue(all(len(s) == 1 for s in sections.values()), doc_id)
+            titles = [next(iter(sections[p])) for p in pages]
+            self.assertEqual(titles[0], "WARNING: RISK OF THYROID C-CELL TUMORS")
+            self.assertIn("1 INDICATIONS AND USAGE", titles)
+            self.assertIn("2 DOSAGE AND ADMINISTRATION", titles)
+            self.assertNotIn("Medication Guide", " ".join(titles))
+
+    def test_indications_name_the_product(self):
+        for doc_id, product in (("NVO-LABEL-OZEMPIC", "OZEMPIC"),
+                                ("LLY-LABEL-MOUNJARO", "MOUNJARO")):
+            [c] = [c for c in _chunks(doc_id) if c["section"] == "1 INDICATIONS AND USAGE"]
+            self.assertRegex(c["text"], rf"\n{product}\W* is indicated")
 
 
 class FactsTest(unittest.TestCase):
