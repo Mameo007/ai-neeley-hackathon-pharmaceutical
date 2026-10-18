@@ -91,8 +91,11 @@ Tickers are uppercase (`NVO`, `LLY`, `AZN`).
   values that change between runs** inside them. Put run-specific content in
   the user message instead.
 - Shared rules all hunters follow (closed-book citation, verbatim quotes,
-  leave `confidence` null) go in `prompts/hunter_rules.md`, placed first in
-  every hunter's system prompt so the hunters share one cached prefix.
+  leave `confidence` null) go in `prompts/hunter_rules.md`, which is the
+  **whole** hunter system prompt; with the shared tool list in
+  `hunters/harness.py` it forms one cached prefix for every hunter. A
+  hunter's own brief (`prompts/<hunter>.md`) goes in the first user message,
+  never in the system prompt.
 
 ## Data and numbers
 
