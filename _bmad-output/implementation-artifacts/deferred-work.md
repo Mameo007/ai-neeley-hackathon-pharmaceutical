@@ -145,3 +145,6 @@ existing entries.
 - source_spec: `_bmad-output/implementation-artifacts/spec-repo-orchestrator.md`
   summary: Show pipeline stage skips/degradations (e.g. "Fact Checker not built: confidence unchecked") in the report PDF.
   evidence: Blind review — they live only in pipeline.json and the console; the report reads no stage status.
+- source_spec: `_bmad-output/implementation-artifacts/spec-comparison-builder.md`
+  summary: Bundle Orange Book / Purple Book entries so the Patent / exclusivity row can be sourced.
+  evidence: Labels carry no exclusivity dates and 6-Ks rarely name patent expiry; the row will be mostly "not disclosed" until those docs exist (Librarian, Partner A).

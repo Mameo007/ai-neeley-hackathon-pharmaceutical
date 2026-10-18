@@ -2,8 +2,8 @@
 
     start  : corpus -> hunters -> Dedup -> Fact Checker -> Quant -> Priced-In -> scoring -> Peer
              -> scoring again, then stop so the analyst can review the selected findings.
-    finish : write the analyst's Sharpest Needle + product into run.json, then Comparison
-             Builder -> Synthesizer -> CEO Move -> Report.
+    finish : write the analyst's Sharpest Needle, product and rivals into run.json, then
+             Comparison Builder -> Synthesizer -> CEO Move -> Report.
 
 Each stage is `await pharmer.<module>.run(run_dir)`. A stage whose module is not on main yet is
 skipped visibly; a required stage that raises stops the phase, an optional one does not.
@@ -13,6 +13,7 @@ contract file), rewritten after every stage so a UI can poll it.
 Usage:
     .venv/bin/python orchestrator.py start NVO [--corpus data/sample/NVO]
     .venv/bin/python orchestrator.py finish runs/NVO-20261018-0230 [--needle F-003] [--product X]
+        [--rivals NAME[,NAME]]
 """
 import argparse
 import asyncio
@@ -26,7 +27,7 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-from pharmer import librarian
+from pharmer import comparison, librarian
 from pharmer import synthesizer as syn
 
 log = logging.getLogger("orchestrator")
@@ -37,7 +38,8 @@ CORPUS_FILES = ["manifest.json", "chunks.jsonl", "facts.jsonl"]
 CORPUS_AUDIT = "librarian_report.json"  # the Librarian's sidecar; copied when present
 # Outputs of the finish phase, cleared before a re-run so a failed re-pick never leaves the
 # previous pick's report looking current.
-FINISH_OUTPUTS = ["comparison.json", "synthesis.json", "ceo_move.json", "report.pdf"]
+FINISH_OUTPUTS = ["comparison.json", "comparison_sources.json", "synthesis.json",
+                  "ceo_move.json", "report.pdf"]
 
 # (stage name, module under pharmer/, required). Scoring runs again after the Peer Agent,
 # which may demote findings (scoring is idempotent by design).
@@ -223,9 +225,11 @@ def _scored_findings(run_dir):
     return findings
 
 
-def prepare_finish(run_dir, needle=None, product=None) -> Path:
+def prepare_finish(run_dir, needle=None, product=None, rivals=None) -> Path:
     """Validate a finish request, record the analyst's choices in run.json, clear the previous
-    finish outputs and mark the run "running". Raises UsageError before writing anything."""
+    finish outputs and mark the run "running". Raises UsageError before writing anything.
+
+    rivals: "A,B" or a list of names; None keeps run.json's, empty clears them."""
     run_dir = Path(run_dir)
     status = syn.read_json_or_none(run_dir / "pipeline.json")
     # A hand-assembled run folder has no pipeline.json. One made by `start` must have reached
@@ -251,6 +255,13 @@ def prepare_finish(run_dir, needle=None, product=None) -> Path:
         run_info.pop("product", None)  # the analyst withdrew an earlier product choice
     elif product is not None:
         run_info["product"] = product
+    if rivals is not None:
+        # The Comparison Builder's own normalizer, so run.json holds the list the stage uses.
+        names = comparison.clean_rivals(rivals, run_info.get("product"))
+        if names:
+            run_info["rivals"] = names
+        else:
+            run_info.pop("rivals", None)  # the analyst withdrew the rival list
     syn.write_json(run_dir / "run.json", run_info)
 
     for name in FINISH_OUTPUTS:
@@ -274,14 +285,15 @@ async def run_finish_stages(run_dir) -> Path:
     return run_dir
 
 
-async def finish_run(run_dir, needle=None, product=None) -> Path:
-    """Phase 2: record the analyst's choices in run.json, then verdict, move and report.
+async def finish_run(run_dir, needle=None, product=None, rivals=None) -> Path:
+    """Phase 2: record the analyst's choices in run.json, then grid, verdict, move and report.
 
     needle: a selected finding id, or None to let CEO Move fall back to the Recommended one
     (the report labels it as not yet confirmed). product: a name, None to keep run.json's, or ""
-    to clear it. Re-running with a new pick is allowed.
+    to clear it. rivals: "A,B" or a list, None to keep run.json's, or empty to clear them.
+    Re-running with a new pick is allowed.
     """
-    return await run_finish_stages(prepare_finish(run_dir, needle, product))
+    return await run_finish_stages(prepare_finish(run_dir, needle, product, rivals))
 
 
 def _stage_lines(status):
@@ -304,8 +316,8 @@ def _pause_summary(run_dir):
                         "says why:", command]
     recommended = next((f["finding_id"] for f, _ in selected if f.get("recommended")), "F-nnn")
     return lines + ["", "Name the Sharpest Needle (Recommended pre-filled; change it to "
-                        "pick another) and confirm the product, then run:",
-                    f"{command} --needle {recommended} --product NAME"]
+                        "pick another), confirm the product and name the rivals, then run:",
+                    f"{command} --needle {recommended} --product NAME --rivals NAME[,NAME]"]
 
 
 def main(argv):
@@ -318,6 +330,8 @@ def main(argv):
     p_finish.add_argument("run_dir")
     p_finish.add_argument("--needle", help="selected finding id named by the analyst")
     p_finish.add_argument("--product", help="product confirmed by the analyst")
+    p_finish.add_argument("--rivals", help='comma-separated rival products, NAME[,NAME] '
+                                           '("" clears them)')
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
 
@@ -326,7 +340,7 @@ def main(argv):
             run_dir = asyncio.run(start_run(args.ticker, corpus=args.corpus))
         else:
             run_dir = asyncio.run(finish_run(args.run_dir, needle=args.needle,
-                                             product=args.product))
+                                             product=args.product, rivals=args.rivals))
     except UsageError as exc:
         print(f"orchestrator: {exc}", file=sys.stderr)
         return 2
