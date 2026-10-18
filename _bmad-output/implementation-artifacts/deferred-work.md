@@ -16,3 +16,6 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-hunters-harness-channel-checker.md`
   summary: Bound get_facts output (cap or required filter) once Partner A's Librarian adds IR-workbook facts.
   evidence: get_facts() with no filter returns every fact; harmless at 15 sample facts, context-flooding on a full corpus.
+- source_spec: `_bmad-output/implementation-artifacts/spec-dedup-judge.md`
+  summary: When leads in one anchor group cite different anchor values/units, Dedup only logs a warning; nothing in findings.json tells the Fact Checker, and a later reasoning can sit under a value none of its quotes contain.
+  evidence: build_finding keeps the earliest anchor; needs either a value in the grouping key or a contract flag (e.g. value_mismatch), which needs Partner A.
