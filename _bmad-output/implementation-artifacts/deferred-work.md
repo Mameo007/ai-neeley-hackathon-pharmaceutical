@@ -74,6 +74,23 @@ existing entries.
 - source_spec: `_bmad-output/implementation-artifacts/spec-synthesizer-ceo-move.md`
   summary: Synthesizer should ignore a comparison.json that reports a failed or empty grid once the Comparison Builder defines its output (status field).
   evidence: unverified (medium if true) — grid_used is `comparison.json exists and parses`; the grid's own shape is not specified yet, so a failed-state grid would be sent as data.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-librarian-xbrl-facts.md`
+  summary: Keep both the original and the restated value for a metric+period, so a
+    figure can be tied against the filing that first reported it as well as the
+    newer filing's comparative column.
+  evidence: XBRL holds both (LLY FY2024 revenue 45,042.7 as first filed, 45,043 as
+    restated in the FY2025 10-K) but Contract 1c's `fact_id` is keyed on
+    ticker+source_kind+metric+period, so two rows collide. Needs a contract change
+    and therefore Partner B's sign-off; "latest filed wins" is the interim rule.
+  
+- source_spec: `_bmad-output/implementation-artifacts/spec-librarian-xbrl-facts.md`
+  summary: IR Excel workbook ingestion — `source_kind: "ir_workbook"` facts for
+    foreign filers' quarterly figures (Novo, AstraZeneca).
+  evidence: XBRL for both is annual only (verified: 0 quarterly rows), so their
+    quarterly findings cannot reach High confidence without this. Needs IR-site
+    discovery plus an .xlsx reader; deferred as the open-ended half of the
+    structured-facts work.
 - source_spec: `_bmad-output/implementation-artifacts/spec-report-pdf.md`
   summary: Show Quant basis (formula, FX), confidence_reason, peer status and priced-in evidence in the report findings.
   evidence: Blind review — the report prints eps_pct/usd_m and hit counts without their basis; §4.10 doesn't list them, so it was left out of step 4a.
