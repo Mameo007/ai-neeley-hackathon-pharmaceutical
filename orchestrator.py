@@ -170,11 +170,11 @@ def _corpus_tickers(corpus):
     return {d.get("ticker") for d in manifest if isinstance(d, dict) and d.get("ticker")}
 
 
-async def start_run(ticker, corpus=None, runs_dir=None) -> Path:
-    """Phase 1: new run folder, corpus, hunting, verification, scoring; stops at the human pause.
+def prepare_run(ticker, corpus=None, runs_dir=None) -> Path:
+    """Validate a start request and create its run folder + pipeline.json (phase "running").
 
-    corpus: a folder holding a prebuilt manifest.json/chunks.jsonl/facts.jsonl to copy instead of
-    running the live Librarian. Returns the run folder; its pipeline.json says how it went.
+    Raises UsageError before creating anything. Split from start_run so a UI learns the run
+    folder before the (long) stages begin.
     """
     ticker = ticker.upper()
     if ticker not in librarian.CIKS:
@@ -191,14 +191,28 @@ async def start_run(ticker, corpus=None, runs_dir=None) -> Path:
         run_dir.mkdir()
     except FileExistsError:
         raise UsageError(f"{run_dir} already exists; start again in a minute") from None
-    status = {"ticker": ticker, "phase": "running", "started_at": _now(), "stages": {}}
-    _save(run_dir, status)
+    _save(run_dir, {"ticker": ticker, "phase": "running", "started_at": _now(), "stages": {}})
+    return run_dir
 
+
+async def run_start_stages(run_dir, corpus=None) -> Path:
+    """Phase 1's stages on a prepared run folder; ends at "awaiting_human" or "failed"."""
+    run_dir = Path(run_dir)
+    status = read_status(run_dir)
     ok = await _run_stages(run_dir, status,
                            [("corpus", _corpus_stage(corpus), True)] + START_STAGES)
     status["phase"] = "awaiting_human" if ok else "failed"
     _save(run_dir, status)
     return run_dir
+
+
+async def start_run(ticker, corpus=None, runs_dir=None) -> Path:
+    """Phase 1: new run folder, corpus, hunting, verification, scoring; stops at the human pause.
+
+    corpus: a folder holding a prebuilt manifest.json/chunks.jsonl/facts.jsonl to copy instead of
+    running the live Librarian. Returns the run folder; its pipeline.json says how it went.
+    """
+    return await run_start_stages(prepare_run(ticker, corpus, runs_dir), corpus)
 
 
 def _scored_findings(run_dir):
@@ -209,19 +223,19 @@ def _scored_findings(run_dir):
     return findings
 
 
-async def finish_run(run_dir, needle=None, product=None) -> Path:
-    """Phase 2: record the analyst's choices in run.json, then verdict, move and report.
-
-    needle: a selected finding id, or None to let CEO Move fall back to the Recommended one
-    (the report labels it as not yet confirmed). Re-running with a new pick is allowed.
-    """
+def prepare_finish(run_dir, needle=None, product=None) -> Path:
+    """Validate a finish request, record the analyst's choices in run.json, clear the previous
+    finish outputs and mark the run "running". Raises UsageError before writing anything."""
     run_dir = Path(run_dir)
-    phase = syn.read_json_or_none(run_dir / "pipeline.json")
-    phase = phase.get("phase") if isinstance(phase, dict) else None
-    # A hand-assembled run folder has no pipeline.json; one made by `start` must have paused.
-    if phase is not None and phase not in ("awaiting_human", "done"):
-        raise UsageError(f"{run_dir} is at phase {phase!r}; `finish` needs a run that stopped "
-                         "at the human pause (see pipeline.json)")
+    status = syn.read_json_or_none(run_dir / "pipeline.json")
+    # A hand-assembled run folder has no pipeline.json. One made by `start` must have reached
+    # the human pause, and not be running now; a failed earlier `finish` may be retried.
+    if isinstance(status, dict):
+        start_done = ((status.get("stages") or {}).get("scoring_after_peer") or {}).get(
+            "status") == "ok"
+        if status.get("phase") == "running" or not start_done:
+            raise UsageError(f"{run_dir} is at phase {status.get('phase')!r}; `finish` needs a "
+                             "run whose `start` reached the human pause (see pipeline.json)")
     findings = _scored_findings(run_dir)
     if findings is None:
         raise UsageError(f"{run_dir} has no scored findings.json; run `start` first")
@@ -233,7 +247,9 @@ async def finish_run(run_dir, needle=None, product=None) -> Path:
     run_info = run_info if isinstance(run_info, dict) else {}
     if needle is not None:
         run_info["sharpest_needle"] = needle
-    if product is not None:
+    if product == "":
+        run_info.pop("product", None)  # the analyst withdrew an earlier product choice
+    elif product is not None:
         run_info["product"] = product
     syn.write_json(run_dir / "run.json", run_info)
 
@@ -241,12 +257,31 @@ async def finish_run(run_dir, needle=None, product=None) -> Path:
         (run_dir / name).unlink(missing_ok=True)
     status = read_status(run_dir)
     status["phase"] = "running"
+    status.pop("error", None)  # a crash recorded by a UI job belongs to the previous attempt
     for name, _, _ in FINISH_STAGES:
         status["stages"].pop(name, None)
+    _save(run_dir, status)
+    return run_dir
+
+
+async def run_finish_stages(run_dir) -> Path:
+    """Phase 2's stages on a run prepared by prepare_finish; ends at "done" or "failed"."""
+    run_dir = Path(run_dir)
+    status = read_status(run_dir)
     ok = await _run_stages(run_dir, status, FINISH_STAGES)
     status["phase"] = "done" if ok else "failed"
     _save(run_dir, status)
     return run_dir
+
+
+async def finish_run(run_dir, needle=None, product=None) -> Path:
+    """Phase 2: record the analyst's choices in run.json, then verdict, move and report.
+
+    needle: a selected finding id, or None to let CEO Move fall back to the Recommended one
+    (the report labels it as not yet confirmed). product: a name, None to keep run.json's, or ""
+    to clear it. Re-running with a new pick is allowed.
+    """
+    return await run_finish_stages(prepare_finish(run_dir, needle, product))
 
 
 def _stage_lines(status):
