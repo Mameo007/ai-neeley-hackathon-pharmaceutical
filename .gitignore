@@ -1,0 +1,11 @@
+# Secrets - never commit API keys
+.env
+
+# Local environment and caches
+.venv/
+__pycache__/
+*.pyc
+
+# Run outputs and per-call API usage logs (local; summarize into docs/build-log.md)
+runs/
+logs/
