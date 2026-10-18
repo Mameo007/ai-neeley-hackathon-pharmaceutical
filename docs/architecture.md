@@ -1,8 +1,14 @@
 # Architecture: AI Agent Team for Pharma Analyst Work
 
 > **Status: design only — nothing implemented yet.**
-> This document is derived entirely from the brainstorming session log at
-> `_bmad-output/brainstorming/brainstorm-ai-agent-pharma-analyst-team-2026-10-17/.memlog.md`.
+> This document is derived entirely from two brainstorming session logs:
+> - `_bmad-output/brainstorming/brainstorm-ai-agent-pharma-analyst-team-2026-10-17/.memlog.md`
+>   (pipeline design)
+> - `_bmad-output/brainstorming/brainstorm-architecture-open-questions-2026-10-17/.memlog.md`
+>   (resolution of every open question from the first session, plus a live
+>   source probe across all 10 shortlist companies — script and raw results
+>   in `source-probe/` next to that log)
+>
 > It describes the agreed architecture for the Neeley AI Forward Advanced Track
 > submission. No code, prompts, or infrastructure exist yet — this is the spec
 > to build against.
@@ -17,22 +23,29 @@ Then Make the Call"). Pick one shortlisted pharma company, find material and
 "Sharpest Needle," build a 5-dimension product comparison against named
 rivals, then take the CEO's seat and commit to one strategic move.
 
+**Product name:** **Pharmer** (Pharmacy + Farmer). Reports carry the masthead
+**PHARMER RESEARCH** — *"We find the needle in the haystack."* The filings are
+the haystack; the Sharpest Needle is the needle.
+
 **Core design emphasis:** the system should do the actual analyst work — not
 just move data through a slick UI. Every output must be traceable to a real
 filing page or transcript quote. The product surface (dropdowns, download,
 email) is secondary to the evidence pipeline underneath it.
 
-**Design is intended to be reusable** across the 10 shortlist companies
-(Merck, BMS, Pfizer, Eli Lilly, Novo Nordisk, AbbVie, J&J, AstraZeneca, Amgen,
-Gilead) without per-company hardcoding, since the Librarian step is
-parameterized by ticker/company.
+**Presentation mode: live demo on a judge-picked company.** A judge names any
+of the 10 shortlist companies (Merck, BMS, Pfizer, Eli Lilly, Novo Nordisk,
+AbbVie, J&J, AstraZeneca, Amgen, Gilead) and the pipeline runs on it live.
+Generalization across all 10 is therefore **must-work, not nice-to-have**: the
+Librarian is parameterized by ticker/company with no per-company hardcoding
+beyond small, hand-verified lookup tables (§2, "Curate the small fixed
+things").
 
-**Non-goals established during the session:**
+**Non-goals established during the sessions:**
 - Not a "Phone-a-Friend" role-play of hypothetical stakeholders — that idea
   was tried and dropped as too speculative; its intent was absorbed into the
   concrete, filing-grounded **Priced-In Detector** instead.
-- Not dependent on earnings-call transcripts being available — the system
-  must degrade gracefully (see §7).
+- Not dependent on live transcript fetching — transcripts are pre-bundled and
+  the system degrades gracefully without them (see §7).
 - Not a system that trusts model memory for any fact — every number/quote
   must resolve to a real source chunk (see §4).
 
@@ -45,12 +58,14 @@ These were the load-bearing decisions that shape every stage below:
 | Principle | Statement |
 |---|---|
 | **Closed-book citation** | Hunter agents may only cite chunk IDs from the Librarian's indexed corpus. They never pull facts from model memory/training data. A citation is a chunk ID, which is mechanically re-openable and checkable. |
-| **Number-tie rule** | Every figure must be verified in **two independent primary sources** (e.g., XBRL structured tag + filing narrative text) before it can be marked **High** confidence. One-source numbers cap at Medium. |
-| **Web search is not evidence** | Web/news search is used *only* to answer "has this already been said/priced in?" (Priced-In Detector). It is never used to source or confirm a fact or figure — search result snippets are confirmed-unreliable (see §7, "search-summary trap"). |
+| **Number-tie rule** | Every figure must be verified in **two independently produced artifacts** before it can be marked **High** confidence. One-source numbers cap at Medium. The rule's job is to catch *our own extraction errors* (wrong column, wrong period, thousands vs. millions, adjusted vs. reported) — not to prove the company truthful, since every source is company-prepared. Default pair: filing table + XBRL tag. Where XBRL is unavailable (foreign filers' quarterly figures, §8), **filing table + IR Excel workbook** is an accepted pair. |
+| **Web search is not evidence** | Web/news search is used *only* to answer "has this already been said/priced in?" (Priced-In Detector). It is never used to source or confirm a fact or figure — search result snippets are confirmed-unreliable (see §8, "search-summary trap"). |
 | **Confidence is earned, not self-reported** | A hunter proposing a finding does not get to assign its own confidence. A separate Fact Checker re-opens the citation and independently verifies it; confidence is a function of that re-check, not of the hunter's self-assessment. |
-| **Graceful degradation** | If a required source category is unavailable for a given company (transcripts being the known risk), the dependent agent is marked "skipped: source unavailable" and the pipeline continues; it does not block or fabricate. |
+| **Conflicts are findings, not noise** | When the data disagrees with itself — a newer filing reverses an older one, or two hunters read the same number two ways — the conflict is kept and surfaced as part of the finding rather than resolved away. Reversals and contested readings are often the least obvious (highest-obscurity) stories. |
+| **Curate the small fixed things once; automate the open-ended things** | Small, stable lookups that automation gets wrong — the US-GAAP↔IFRS concept map, each company's NDC labeler codes, the non-EDGAR rival annual reports, transcripts — are hand-built/hand-collected once, verified, and reused for every run. Open-ended work (hunting, verification, quantification) is automated. |
+| **Graceful degradation** | If a required source category is unavailable for a given company, the dependent agent is marked "skipped: source unavailable" and the pipeline continues; it does not block or fabricate. |
 | **Run expensive agents less** | Agents that are costly to run many times (Peer Agent) are deliberately sequenced *after* deduplication and first-pass ranking, operating only on the surviving top ~10 candidates, not the full lead pool. |
-| **Human-in-the-loop at the irreversible step** | The AI ranks and recommends — it does not pre-select. A human chooses the final 5 findings from the ranked top ~10 (and names the Sharpest Needle) and the product choice before downstream stages (comparison, synthesis, CEO move, report) consume them. |
+| **AI selects, human names the needle** | The AI selects the final 5 findings and tags **one** of them **Recommended** (its suggested Sharpest Needle). The human sees the 5 and names the Sharpest Needle — accepting the Recommended one or choosing a different one of the 5. The human also confirms the product, and resolves any ambiguous label match (§4.0). Those are the only three human pause points. |
 
 ---
 
@@ -62,19 +77,19 @@ These were the load-bearing decisions that shape every stage below:
 |---|---|---|---|
 | 0 | Source acquisition & indexing | **Librarian** | 1, runs once per company |
 | 1 | Parallel candidate finding generation | **Hunter swarm** (8 hunters) | 8, run in parallel |
-| 2 | Dedup/merge | Dedup/merge step | 1 |
+| 2 | Dedup/merge | Dedup/merge step (code + LLM judge) | per fact-anchor group |
 | 3 | Independent verification | **Fact Checker** | runs per candidate |
 | 4 | Impact quantification | **Quant agent** | runs per candidate |
 | 5 | Priced-in / obscurity check | **Priced-In Detector** | runs per candidate |
 | 6 | Scoring & ranking | **Selection/scoring logic** (code, not an agent persona) | 1 |
 | 7 | Peer re-rank | **Peer Agent** | runs once, only on top ~10 |
-| 8 | Human selection | Human-in-loop UI (AI recommends, human picks) | 1 |
+| 8 | Final 5 + Sharpest Needle | AI selects 5 and tags one Recommended; **human names the Sharpest Needle** | 1 |
 | 9 | Product selection | Hybrid dropdown (AI pre-select + user confirm) | 1 |
 | 10 | Label/rival-specific hunting | **Label Lawyer** (+ rival fetch) | runs after product is fixed |
 | 11 | Comparison build | **Comparison Builder** | 1 |
 | 12 | Verdict synthesis | **Synthesizer** | 1 |
 | 13 | Strategic recommendation | **CEO Move agent** | 1 |
-| 14 | Report assembly | **Exec Report** generator | 1 |
+| 14 | Report assembly | **Exec Report** generator (PDF) | 1 |
 | 15 | Delivery | Download / email | 1 |
 
 ### 3.2 Full pipeline diagram
@@ -85,10 +100,10 @@ flowchart TD
 
     subgraph Corpus["Librarian corpus (shared, page-indexed, closed-book source of truth)"]
         C1[2 latest 10-K / 20-F]
-        C2[latest 10-Q / 6-K]
-        C3["Last 4 earnings-call transcripts<br/>(if available)"]
-        C4[Rival filings]
-        C5[DailyMed labels]
+        C2["latest 10-Q / 6-K<br/>+ prior-year same quarter"]
+        C3["Last 4 earnings-call transcripts<br/>(pre-bundled)"]
+        C4["Rival filings<br/>(EDGAR + pre-bundled non-EDGAR rival ARs)"]
+        C5["DailyMed labels<br/>(labeler-code filtered)"]
         C6[Orange/Purple Book]
         C7[XBRL structured data]
         C8[IR Excel financial workbooks]
@@ -104,16 +119,16 @@ flowchart TD
     Corpus --> H7[Label Lawyer - company-wide pass]
     Corpus --> H8[Peer Contraster]
 
-    H1 & H2 & H3 & H4 & H5 & H6 & H7 & H8 --> D[Dedup / merge<br/>lead pool to findings table]
+    H1 & H2 & H3 & H4 & H5 & H6 & H7 & H8 --> D["Dedup / merge<br/>code groups by fact anchor,<br/>LLM compares reasonings"]
 
-    D --> E["Fact Checker<br/>re-open chunk, string-match quote,<br/>cross-check number vs XBRL"]
-    E --> F["Quant agent<br/>LLM picks formula + inputs,<br/>Python executes arithmetic"]
+    D --> E["Fact Checker<br/>re-open chunk, string-match quote,<br/>number-tie vs XBRL or IR workbook,<br/>trend strip + like-for-like check"]
+    E --> F["Quant agent<br/>LLM picks formula + inputs,<br/>Python executes arithmetic + FX"]
     F --> G["Priced-In Detector<br/>web search: already discussed? stock moved? material?"]
 
     G --> SEL["Selection / scoring<br/>(see decision-flow diagram)"]
     SEL --> PEER["Peer Agent<br/>runs once, top ~10 only<br/>demotes industry-wide findings"]
-    PEER --> AIREC["AI recommendation (advisory)<br/>suggested 5 + suggested Sharpest Needle,<br/>not a selection"]
-    AIREC --> HUMAN["Human-in-loop<br/>reviews ranked ~10 + AI recommendation,<br/>SELECTS final 5, NAMES Sharpest Needle"]
+    PEER --> AISEL["AI selects final 5<br/>(diversity rule enforced),<br/>tags ONE as Recommended"]
+    AISEL --> HUMAN["Human<br/>sees the 5, NAMES Sharpest Needle<br/>(accept Recommended or pick another of the 5)"]
 
     HUMAN --> PROD["Product selection<br/>hybrid dropdown:<br/>AI pre-selects from strongest findings,<br/>user confirms/overrides"]
     PROD --> LL2["Label Lawyer (product-specific pass)<br/>+ rival filings/labels fetch"]
@@ -124,7 +139,7 @@ flowchart TD
 
     SYN --> CEO["CEO Move agent<br/>reads 5 findings + Sharpest Needle + verdict,<br/>outputs one concrete move:<br/>timeframe, trade-off, risk-if-wrong,<br/>cites specific finding(s)"]
 
-    CEO --> REPORT["Exec Report<br/>sell-side research-note style"]
+    CEO --> REPORT["Exec Report (PDF)<br/>PHARMER RESEARCH research note"]
     CB --> REPORT
     HUMAN --> REPORT
 
@@ -154,6 +169,39 @@ flowchart LR
     DEDUP --> TABLE[Findings table<br/>enters Fact Checker]
 ```
 
+### 3.4 Execution model & run-time budget
+
+Because the demo is live, run time is a design constraint.
+
+- **Pipelining (decided):** stages do not run as batches. Each candidate
+  flows into Fact Checker → Quant → Priced-In Detector **as soon as it
+  emerges** from Dedup, so verification overlaps with hunting.
+  One barrier is unavoidable: scoring and the Peer Agent need the **full**
+  candidate pool, since findings can't be ranked until all exist.
+- **Model tiering (decided):** a faster, cheaper model for the mechanical
+  stages (Dedup judge, Fact Checker, Quant formula selection); the strongest
+  model for the hunters, Synthesizer, and CEO Move agent.
+- **Estimated budget (reasoned, not measured — nothing is built):**
+
+| Stage | Estimate (stage-by-stage design) | What drives it |
+|---|---|---|
+| Librarian (cold) | 2–4 min | ~20–30 docs; SEC ~10 req/s; parsing + indexing ~1M tokens |
+| 8 hunters (parallel) | 4–8 min | 5–15 tool turns each × 10–30s; wall time = slowest hunter |
+| Dedup | 0.5–1 min | grouping is code; LLM per group, parallel |
+| Fact Checker | 1–2 min | mostly code; LLM only on partial matches |
+| Quant | 1–2 min | LLM formula choice + Python, parallel |
+| Priced-In Detector | 2–4 min | web search + price check per candidate; most variable stage |
+| Scoring | <1 sec | code |
+| Peer Agent (top ~10) | 1–2 min | rival filings already indexed |
+| Human pauses | ~1–2 min | Sharpest Needle, product confirm, possible label resolution |
+| Label Lawyer product pass + Comparison Builder | 2–4 min | 4–5 labels; ~20 grid cells in parallel |
+| Synthesizer + CEO Move + Report | 2–4 min | short inputs; ~3–5k tokens of report output + PDF render |
+| **Total** | **~20–35 min** cold | **~13–22 min** with pipelining + model tiering |
+
+- **Fallback lever (not yet adopted):** pre-cache the full Librarian corpus
+  for all 10 companies, removing the 2–4 min cold fetch. Decide after real
+  timings are measured in the Stage-2 golden runs (§9.2).
+
 ---
 
 ## 4. Agent Roster
@@ -167,23 +215,55 @@ flowchart LR
   set once known.
 - **Outputs:** Page-indexed corpus (chunk ID → doc, page, span) plus a
   **source manifest**: every doc logged with URL, accession number, filing
-  date, fiscal period, doc type. Manifest is surfaced to the user as a "what
-  we read" panel.
+  date, fiscal period, doc type, and whether it was fetched live or
+  **pre-collected** (with source URL + collection date). Manifest is surfaced
+  to the user as a "what we read" panel.
 - **Source set it must acquire:**
   - 2 latest annual reports (10-K or 20-F)
   - latest quarterly report (10-Q, or 6-K for foreign private issuers)
-  - last 4 earnings-call transcripts (by date — see §7)
-  - rival filings (for Peer Contraster and Peer Agent)
+  - **prior-year same-quarter quarterly report** — needed because quarterly
+    balance sheets compare only against the last year-end, so like-for-like
+    seasonality checks on balance-sheet items (receivables, inventory) need
+    the year-ago filing (§4.3)
+  - last 4 earnings-call transcripts (pre-bundled — see §7)
+  - rival filings (for Peer Contraster and Peer Agent) — from EDGAR, or from
+    the **pre-bundled pinned corpus** for rival makers not on EDGAR (§8.2)
   - rival labels (for Label Lawyer)
-  - DailyMed labels (filtered to the actual labeler, latest SPL version)
+  - DailyMed labels (selected by the label rule below)
   - Orange Book (small molecules) / Purple Book (biologics)
   - XBRL structured company facts
-  - IR Excel financial workbooks (product × region quarterly sales) — identified
-    as a high-value structured source alongside XBRL, especially for
-    gross-to-net and channel analysis
+  - IR Excel financial workbooks (product × region quarterly sales) — a
+    first-class structured source, and the number-tie second source where
+    XBRL has no quarterly data
+- **Filer-type branching:** domestic 10-K/10-Q vs. foreign 20-F/6-K. For
+  foreign filers:
+  - follow "incorporated by reference" exhibits (Novo's annual report lives
+    in a separate exhibit);
+  - identify the **financial** 6-Ks by reading content — not by file name or
+    filer-agent accession prefix, both of which vary (§8).
+- **Fiscal-period matching:** match quarters by fiscal period (FY/FQ), never
+  by calendar date — Pfizer and J&J use 52/53-week quarters
+  (2026-06-28 vs. 2025-06-29).
+- **Label rule (DailyMed SPL selection):**
+  1. Get the product's NDA/BLA number from the Orange Book / Purple Book
+     (trade-name lookup must be prefix/fuzzy — e.g., `CABENUVA KIT`).
+  2. Pull every DailyMed SPL filed under that application.
+  3. Keep only SPLs whose **NDC labeler code** is on the hand-verified
+     per-company allowlist (§8.2 — several codes per company). Company names
+     can't be used: Novo appears as three different names across SEC, Orange
+     Book, and DailyMed, while repackagers carry the *same* NDA number.
+  4. Take the latest published version.
+  5. **Zero or multiple survivors → pause and ask the human** to pick
+     (candidates shown with title, date, labeler). No auto-pick: a wrong
+     label would silently corrupt every Comparison Builder cell.
+  - DailyMed is the **only** label source. openFDA was tested and rejected
+    as a backup (missing Novo's own Ozempic injection SPL; mis-tagged a
+    combined Ozempic/Rybelsus entry).
+- **Purple Book access:** monthly CSV download; scrape the link from the
+  downloads page rather than constructing the URL (month capitalization is
+  inconsistent).
 - **Correctness checks:** flags wrong fiscal year, 10-K/A amendments, stale
-  label versions; must follow "incorporated by reference" exhibits rather
-  than trusting the primary filing document alone (see §8 gotchas).
+  label versions.
 
 ### 4.1 Hunter Swarm (8 agents, parallel, closed-book)
 
@@ -205,24 +285,66 @@ and proposes candidate findings with a citation (chunk ID) for every claim.
   needs, including peer companies' filings (Peer Contraster) and rival
   labels (Label Lawyer) — this pushed cross-company fetching earlier into
   the pipeline than a naive single-company design would.
+- **Turn cap:** hunters run with a bounded number of tool turns so one slow
+  hunter can't stall the run (exact cap set during build).
 
 ### 4.2 Dedup / Merge
 
-- **Role:** Collapse overlapping leads raised by multiple hunters into one
-  findings-table row before verification, so the same underlying fact isn't
-  fact-checked, quantified, and scored multiple times.
+- **Role:** Collapse overlapping leads raised by multiple hunters before
+  verification, so the same underlying fact isn't fact-checked, quantified,
+  and scored multiple times — **without** collapsing genuinely different
+  stories about that fact.
+- **Two-level model:**
+  - **Fact anchor** — the raw observation: metric + entity + fiscal period
+    (e.g., "Novo trade receivables, +25.5%, H1 2026"). Verified **once** by
+    the Fact Checker no matter how many hunters cite it.
+  - **Reasoning** — the causal claim built on the anchor (e.g., "demand
+    softening" vs. "payer-rebate timing"). Different reasonings can carry
+    very different business impact, so each is quantified and scored on its
+    own.
+- **Algorithm (hybrid):**
+  1. **Code** groups leads by fact anchor (deterministic match on metric +
+     entity + period).
+  2. **LLM judge** compares reasonings *only within* each group.
+  3. Same anchor + same reasoning → merged into one, all contributing
+     hunters credited.
+  4. Same anchor + different reasonings → one **composite row**.
+- **Composite row:** one issue, N reasoning bullets, each with its own
+  citations, **its own confidence and its own Quant impact** (so a
+  High-confidence harmless reading can't lend credibility to a
+  Medium-confidence damaging one). The row's ranking score = its strongest
+  reasoning. When reasonings contradict each other, the anchor is flagged
+  **"contested"** — a signal for the reviewer in itself.
+- **Split option:** composite by default; any reasoning can be promoted to a
+  standalone finding. Sibling reasonings of one anchor **may both** occupy
+  slots in the final 5 — there is no one-slot-per-anchor cap.
 - **Inputs:** Raw lead pool from all 8 hunters.
-- **Outputs:** Deduplicated findings table.
+- **Outputs:** Deduplicated findings table (single rows + composite rows).
 
 ### 4.3 Fact Checker
 
 - **Role:** Re-verification, not re-discovery, and explicitly **not** web
   search. Re-opens the exact cited chunk, exact string-matches the quote,
-  and cross-checks any number + fiscal period against XBRL structured data.
+  and cross-checks any number + fiscal period against a second source.
+- **Number-tie second source:** XBRL tag by default; **IR Excel workbook**
+  when XBRL has no data for that figure (foreign filers' quarterly numbers).
+  Filing table + workbook agreeing is sufficient for High.
+- **Trend strip:** for every figure, pulls the **same metric across every
+  period in the corpus** (e.g., FY24 → FY25 → Q1 → Q2) and attaches it to the
+  finding, so a reversal is visible rather than detected by special-case
+  rule.
+- **Reversal handling:** when a newer filing reverses an older finding, the
+  finding is **kept and recast with the reversal as the story** (e.g.,
+  "receivables flipped from −1.5% to +25.5% in six months").
+- **Seasonality check:** a flip is confirmed **like-for-like** (H1 2026 vs.
+  H1 2025, using the prior-year same-quarter filing), not quarter-end vs.
+  year-end. If like-for-like can't be confirmed (the comparable filing
+  genuinely can't be found), the finding is **capped at Medium** and carries
+  a **"possibly seasonal"** warning label.
 - **Inputs:** One candidate finding (claim + citation chunk ID).
 - **Outputs:** Verification verdict:
-  - **Verbatim match + math reproduces** → eligible for **High**
-  - **Partial match** → **Medium**
+  - **Verbatim match + number-tie reproduces** → eligible for **High**
+  - **Partial match** (or like-for-like unconfirmable) → **Medium**
   - **Can't locate / doesn't reproduce** → **Low**, or dropped
 - **This is where confidence is actually assigned** — hunters do not
   self-report confidence.
@@ -234,6 +356,27 @@ and proposes candidate findings with a citation (chunk ID) for every claim.
 - **Mechanism:** LLM selects the inputs and the formula (written out,
   auditable); a Python execution step actually does the arithmetic, so the
   number in the final table is computed, not generated.
+- **Currency rules:**
+  - **Growth rates are quoted as the company discloses them** — reported
+    growth plus the company's own constant-currency figure (Novo "CER",
+    Lilly's FX-effect column). We never compute our own constant-currency
+    growth: methodologies differ per company, so ours would create false
+    mismatches against the filings.
+  - **Our own FX conversion is used only for cross-company absolute-dollar
+    comparisons** (absolute amounts are required in the deliverable; ratios
+    alone are not enough). Source: **ECB reference rates** (free daily API;
+    USD/DKK via the EUR cross rate). Flows (revenue, costs) at the
+    **period-average** rate; balances (receivables, inventory) at the
+    **period-end** rate (mirrors IAS 21 / ASC 830).
+  - Always show **native + converted**, with the rate and date in the
+    footnote — e.g., "DKK 69.6bn (≈ $10.8bn at 6.44 DKK/USD, ECB,
+    30 Jun 2026)". The conversion runs in the Python step.
+- **Taxonomy mapping:** a hand-built concept map of the ~20–30 metrics
+  hunters actually use, US-GAAP ↔ IFRS (e.g., `Revenues` ↔ `Revenue`,
+  `AccountsReceivableNetCurrent` ↔ `CurrentTradeReceivables`,
+  `InventoryNet` ↔ `Inventories`). An unmapped metric falls back to the
+  filing table (one fewer source → lower confidence ceiling) and is logged as
+  **"unmapped metric"**; rows are added from that miss log during testing.
 - **Inputs:** Verified finding + relevant structured financials.
 - **Outputs:** $ impact estimate, formula shown, inputs shown.
 
@@ -264,9 +407,13 @@ and proposes candidate findings with a citation (chunk ID) for every claim.
 - **When it runs:** Deliberately placed *after* dedup and the first-pass
   ranking, operating only on the **top ~10** surviving candidates — chosen
   specifically to minimize how many times this (expensive) agent has to run.
+  At ~1–2 min it is not the run-time bottleneck (§3.4).
+- **Sourcing gaps:** if a rival's filings are missing from the corpus, the
+  finding is marked **"peer check incomplete"** and is **not demoted**.
+  Pre-bundling non-EDGAR rival annual reports (§8.2) keeps this rare.
 - **Inputs:** Top ~10 ranked findings + rival filings from the Librarian corpus.
 - **Outputs:** Uniqueness/demotion signal that feeds back into final ranking
-  before the human sees the shortlist.
+  before the AI selects the final 5.
 
 ### 4.7 Comparison Builder
 
@@ -275,9 +422,9 @@ and proposes candidate findings with a citation (chunk ID) for every claim.
 - **Grid dimensions:** uses (approved indications), boxed warnings/safety
   fine print, dosing/convenience, patent/exclusivity timeline, pricing &
   gross-to-net exposure.
-- **Sourcing rule:** every cell cites a label section or Orange/Purple Book
-  entry; a cell that cannot be sourced shows **"not disclosed"** rather than
-  a guess.
+- **Sourcing rule:** every cell cites a label section (label chosen by the
+  §4.0 label rule) or an Orange/Purple Book entry; a cell that cannot be
+  sourced shows **"not disclosed"** rather than a guess.
 - **Deliberately excludes:** the verdict/tie-in sentence — kept out of this
   agent so the grid stays pure sourcing and any interpretive claim stays
   separately traceable (see Synthesizer below).
@@ -296,30 +443,37 @@ and proposes candidate findings with a citation (chunk ID) for every claim.
 ### 4.9 CEO Move agent
 
 - **Role:** A **separate stage** from the Synthesizer (explicitly decided,
-  not merged). Reads the final 5 approved findings, the named Sharpest
-  Needle, and the Synthesizer's verdict sentence, and outputs **one**
-  concrete recommended strategic move.
+  not merged). Reads the final 5 findings, the named Sharpest Needle, and the
+  Synthesizer's verdict sentence, and outputs **one** concrete recommended
+  strategic move.
 - **Output must include:**
   - A specific action (not "investigate further")
   - A timeframe
   - The trade-off
   - Downside / risk if wrong
   - Citations back to the specific finding(s) that justify it
-- **Inputs:** 5 approved findings, Sharpest Needle, Synthesizer verdict.
+- **Inputs:** Final 5 findings, Sharpest Needle, Synthesizer verdict.
 
 ### 4.10 Exec Report
 
 - **Role:** Assembles everything into a single sell-side-style research
   note. User decision: this must read like a real analyst deliverable, not
   a skimmable internal brief.
+- **Format:** **PDF.**
 - **Required structure:**
-  - Masthead (branded, analyst-note style)
+  - Masthead: **PHARMER RESEARCH** — *"We find the needle in the
+    haystack."* (Our own identity; must not imitate any real bank's research
+    branding.)
   - Thesis paragraph, with the Sharpest Needle as the headline call
   - 5 numbered findings, each with a confidence badge and footnote
+    (composite rows show each reasoning with its own badge; "contested" and
+    "possibly seasonal" labels are carried through)
   - Comparison table (from Comparison Builder)
   - Boxed callout for the CEO-move recommendation
   - Footnotes in **plain text** — filing name + page number — **no
     hyperlinks** (explicit user decision)
+- **Copy note:** avoid the word "pharming" (an existing term for GM
+  organisms producing drugs, and a DNS phishing attack).
 - **Delivery:** download and email.
 
 ---
@@ -327,11 +481,9 @@ and proposes candidate findings with a citation (chunk ID) for every claim.
 ## 5. Selection & Scoring Logic
 
 Selection is implemented as **code applying a judge's rubric**, not a model
-free-associating a ranking. The same scoring mechanism that ranks findings
-also produces the *recommended* Sharpest Needle — but the rubric's output is
-advisory. The final 5 and the final Sharpest Needle are a human decision,
-not an automatic one; the rubric's job is to make that decision fast and
-well-informed, not to make it instead of the human.
+free-associating a ranking. The rubric selects the **final 5** and tags one
+of them **Recommended** (the suggested Sharpest Needle). The human's decision
+is which of those 5 is the Sharpest Needle.
 
 ### 5.1 Rubric
 
@@ -342,23 +494,31 @@ well-informed, not to make it instead of the human.
      EPS (or equivalent).
    - *Obscurity* = inverse of Priced-In Detector hits — zero hits in
      calls/news ⇒ high obscurity score.
-3. **Diversity rule:** cap of 2 findings per hunter in the final slate, and
-   require at least 1 label/product finding so the findings table ties
-   into the required product comparison.
-4. **Peer re-rank:** Peer Agent runs on the top ~10 and demotes any finding
+   - Composite rows score as their strongest reasoning.
+3. **Peer re-rank:** Peer Agent runs on the top ~10 and demotes any finding
    shown to be industry-wide across shortlist peers rather than distinctive
-   to this company.
-5. **AI recommendation (advisory only):** the highest Materiality ×
-   Obscurity score among remaining High/Medium-confidence findings, after
-   peer demotion, is surfaced as the *suggested* Sharpest Needle — a
-   recommendation, not an automatic pick.
-6. **Human-in-loop:** UI shows the ranked top ~10 with score breakdown,
-   confidence badges, and the AI's recommended 5 + recommended Sharpest
-   Needle highlighted. The human **selects** the final 5 from the top ~10
-   (not limited to the AI's picks) and **names** the Sharpest Needle —
-   accepting the recommendation or choosing differently. Each row displays
-   *why* the AI recommended it (the score components), to inform the
-   human's choice without making it for them.
+   to this company ("peer check incomplete" ⇒ no demotion).
+4. **Diversity rule — applied to the AI's final 5 (hard rule):**
+   - **Greedy fill by score:** walk down the ranked list, taking each
+     finding unless it would push a hunter past **2** findings in the 5.
+     Composite rows count only against the hunter behind their **lead
+     reasoning**.
+   - **Label guarantee:** if the 5 contain no label/product finding, swap
+     out the **lowest-scored non-label** finding for the **highest-scored
+     eligible label** finding.
+   - **Tie-breaks:** higher confidence (High > Medium), then higher
+     obscurity, then higher materiality. Obscurity outranks materiality
+     because "not obvious" is the core of the case.
+   - **No eligible label finding at all:** run **one** targeted Label Lawyer
+     pass to look harder; if it still finds none, ship the 5 with a visible
+     **"no label/product finding"** warning.
+5. **Recommended tag:** the highest-scoring of the final 5 is tagged
+   **Recommended** — the suggested Sharpest Needle.
+6. **Human names the Sharpest Needle:** the UI shows the 5 with score
+   breakdown, confidence badges, and the Recommended tag, plus *why* each was
+   selected (the score components). The human accepts the Recommended
+   finding or names a different one of the 5. The human does not change
+   which 5 are selected.
 
 ### 5.2 Rejected/retired scoring ideas (recorded for traceability)
 
@@ -370,6 +530,8 @@ well-informed, not to make it instead of the human.
   They were re-mapped instead to Part 2's "Why it will work" section (the
   CEO Move agent's audience of doctors/patients/payers/regulators/investors).
 - "Future Output" (time horizon) was dropped outright as a 5th criterion.
+- An interim design had the human select the final 5 from a ranked top ~10;
+  superseded — the AI selects the 5, the human names the Sharpest Needle.
 
 ### 5.3 Selection decision-flow diagram
 
@@ -379,23 +541,22 @@ flowchart TD
     GATE -- "Low: dropped" --> DROP[Excluded from scoring]
     GATE -- "Medium or High" --> SCORE["Score =<br/>Materiality (Quant % of EPS)<br/>x Obscurity (Priced-In Detector)"]
 
-    SCORE --> DIV{"Diversity rule:<br/>max 2 per hunter,<br/>>=1 label/product finding?"}
-    DIV -- fails --> REBAL[Re-balance slate<br/>pull next-highest-score<br/>eligible finding]
-    REBAL --> DIV
-    DIV -- passes --> TOP10["Rank, take top ~10"]
+    SCORE --> TOP10["Rank, take top ~10"]
+    TOP10 --> PEER["Peer Agent re-rank<br/>(runs once, only here)<br/>industry-wide -> demoted;<br/>peer check incomplete -> no demotion"]
+    PEER --> FILL["Greedy fill of 5 by score<br/>skip any that pushes a hunter past 2"]
 
-    TOP10 --> PEER["Peer Agent re-rank<br/>(runs once, only here)<br/>industry-wide finding -> demoted"]
-    PEER --> RANKED["Final ranked list<br/>with score breakdown + confidence badges"]
+    FILL --> LBL{">=1 label/product<br/>finding in the 5?"}
+    LBL -- yes --> FIVE[AI's final 5]
+    LBL -- "no, eligible label finding exists" --> SWAP["Swap lowest-scored non-label<br/>for highest-scored label finding"]
+    SWAP --> FIVE
+    LBL -- "no eligible label finding" --> RETRY["One targeted Label Lawyer pass"]
+    RETRY -- "found" --> SWAP
+    RETRY -- "still none" --> WARN["Ship 5 with<br/>'no label/product finding' warning"]
+    WARN --> FIVE
 
-    RANKED --> NEEDLE["AI recommendation (advisory):<br/>suggested Sharpest Needle =<br/>highest Materiality x Obscurity<br/>among remaining High/Medium findings"]
-    RANKED --> HUMAN{"Human-in-loop:<br/>reviews ranked ~10 + AI's<br/>recommended 5 / Sharpest Needle"}
-    NEEDLE --> HUMAN
-
-    HUMAN -- "selects final 5<br/>(own picks or AI's)" --> FIVE[Final 5 findings]
-    HUMAN -- "names Sharpest Needle<br/>(accepts or overrides AI)" --> NAMED[Named Sharpest Needle]
-
-    FIVE --> NEXT["Feeds: product selection,<br/>Comparison Builder tie-in,<br/>Synthesizer, CEO Move agent"]
-    NAMED --> NEXT
+    FIVE --> REC["Tag highest-scoring of the 5<br/>as Recommended"]
+    REC --> HUMAN{"Human names Sharpest Needle:<br/>accept Recommended or<br/>pick another of the 5"}
+    HUMAN --> NEXT["Feeds: product selection,<br/>Comparison Builder tie-in,<br/>Synthesizer, CEO Move agent"]
 ```
 
 ---
@@ -416,7 +577,9 @@ flowchart TD
      the strongest surviving findings cluster around.
   4. User confirms or overrides.
   5. Only then do Label Lawyer's product-specific pass and the rival
-     filing/label fetch run, feeding the Comparison Builder.
+     filing/label fetch run, feeding the Comparison Builder. If the label
+     rule (§4.0) can't resolve a single label for the product or a rival,
+     the run pauses for the human to pick.
 - This ordering avoids redundant fetching/hunting under multiple products
   and keeps the expensive, rival-aware work minimal.
 
@@ -438,10 +601,16 @@ across the 10 shortlist companies.
   run date, since a new quarter rolls the oldest one off (e.g., for Novo as
   of 2026-10-17: Q3 2025, Q4/FY2025, Q1 2026, Q2 2026 — Q3 2026 due ~early
   Nov 2026 would roll Q3 2025 off).
-- **Decision: transcripts are optional, not required.**
-  - Librarian attempts auto-fetch.
-  - If that fails, the user is offered a manual upload path.
-  - If neither succeeds, **Call Decoder is marked "skipped: no
+- **Decision: pre-bundle transcripts.** ~40 documents (10 companies × 4
+  calls) are collected ahead of time — only from legitimately obtainable
+  sources (company-IR-posted transcripts, our own access) — and loaded into
+  the pinned corpus like any other source. Because the window rolls, the
+  bundle is **re-collected shortly before demo day**.
+- **Fallback chain at run time:**
+  - Librarian attempts auto-fetch for anything fresher than the bundle.
+  - Pre-bundled transcripts are used otherwise.
+  - The user is offered a manual upload path for any gap.
+  - If none succeeds, **Call Decoder is marked "skipped: no
     transcripts available"** and that coverage gap is shown in the UI.
   - Critically: **findings from the other 7 hunters are unaffected** — the
     pipeline does not block, stall, or degrade other agents' output because
@@ -449,85 +618,145 @@ across the 10 shortlist companies.
 
 ---
 
-## 8. Live Data-Source Gotchas (Discovered During Session, Novo Nordisk Case)
+## 8. Live Data-Source Gotchas
 
-These were surfaced doing a live check against real EDGAR/XBRL/DailyMed/
-Orange Book data for Novo Nordisk, and generalize into Librarian design
-rules — not illustrative examples, actual verified findings:
+Surfaced by live checks against real EDGAR / XBRL / DailyMed / openFDA /
+Orange Book / Purple Book / IR data. These are verified findings, not
+illustrative examples, and each one generalizes into a Librarian design
+rule.
+
+### 8.1 Novo Nordisk deep check (session 1, extended in session 2)
 
 | Gotcha | What was found | Design implication |
 |---|---|---|
 | **20-F has no financials inline** | Novo's 20-F primary document incorporates the Annual Report **by reference** as a separate exhibit (`nvo-20251231_d2.htm`, ~10MB) | Librarian must follow incorporation-by-reference exhibits, not just parse the primary filing document |
 | **Foreign filers use 6-K, not 10-Q** | Novo does not file a 10-Q; quarterly data arrives as a 6-K (e.g., Q2 2026 filed 2026-08-04, `caq22026.htm`) | Librarian must treat 6-K as the 10-Q equivalent for foreign private issuers |
-| **XBRL taxonomy/currency mismatch for peer comps** | Novo's XBRL companyfacts uses `ifrs-full` taxonomy, DKK currency, annual granularity only | Peer comparison against USD/US-GAAP filers (e.g., Eli Lilly) requires an explicit FX conversion step *and* a taxonomy field-mapping step (e.g., IFRS "Revenue" vs. US-GAAP "Revenues") — this is unresolved engineering work, flagged as an open risk |
-| **DailyMed returns noise** | Querying semaglutide returned 9 SPLs including repackagers (e.g., A-S Medication) with stale 2020–2024 dates | Librarian must filter to the actual original labeler (Novo) and select the latest SPL version, not just "first result" |
-| **Orange Book worked cleanly** | Semaglutide compound patent 8129343 expires 2031-12-05; Ozempic-specific patents run to 2041; exclusivities run 2027–2029 | No special handling needed beyond normal parsing |
-| **IR has workbooks, not transcripts** | Novo IR publishes investor presentations and quarterly Excel financial workbooks (strong structured source for product-level sales/gross-to-net) but **no call transcripts** | Confirms IR Excel workbooks as a first-class Librarian source; confirms transcript gap must be handled via §7 |
-| **Search-summary trap** | A web search summary stated Q2 adjusted sales +7% CER; the actual 6-K table showed **reported** net sales +3% CER — a reported-vs-adjusted mismatch baked into the search snippet | Reinforces the number-tie rule: search output is never trusted as a number source, ever, for any purpose except priced-in detection |
-| **Stale lead risk / point-in-time sensitivity** | FY2025 10-K-equivalent showed trade receivables **-1.5%** YoY (a true but, it turned out, stale signal); the subsequent Q2 2026 6-K showed receivables **+25.5%** in 6 months — the newest filing flips the Channel Checker lead entirely | A finding's confidence/freshness must account for filing recency and potential seasonality; Librarian/Fact Checker should flag when a more recent filing exists that could invalidate an older-filing-derived finding |
+| **Most 6-Ks are noise** | Novo filed 63 6-Ks in 2026 (buyback notices, press releases). The financial ones were filed under different filer-agent accession prefixes over time (Q2 2025 `caq22025.htm` via `0001628280`, Q2 2026 via `0000353278`) | Detect financial 6-Ks by content; never key on accession prefix |
+| **No quarterly XBRL for foreign filers** | Novo's XBRL companyfacts is `ifrs-full`, DKK, **annual only** — no quarterly receivables. Lilly's (US-GAAP) includes 10-Q quarterly facts | For foreign filers' quarterly figures, the IR workbook is the number-tie second source (§2, §4.3); FX + concept mapping per §4.4 |
+| **Prior-year same quarter is retrievable** | Novo's Q2 2025 6-K fetched fine: trade receivables DKK 69,575m (30 Jun 2025) vs. 71,949m (31 Dec 2024) | Like-for-like seasonality checks are feasible; prior-year quarter added to the source set |
+| **DailyMed returns noise** | Ozempic returned SPLs from repackager A-S Medication (NDC `50090`) under the **same NDA 209637** as Novo's own (NDC `0169`) | Application number alone can't filter repackagers; filter by NDC labeler code (§4.0 label rule) |
+| **One company, three names** | SEC: "NOVO NORDISK A S"; Orange Book applicant: "NOVO NORDISK INC"; DailyMed labeler: "NOVO NORDISK PHARMACEUTICAL INDUSTRIES, LP" | Never match entities by name; use labeler codes |
+| **openFDA is unreliable** | openFDA's label API lacked Novo's own Ozempic injection SPL and mis-tagged a combined Ozempic/Rybelsus entry | DailyMed is the only label source |
+| **Orange Book worked cleanly** | Semaglutide compound patent 8129343 expires 2031-12-05; Ozempic-specific patents run to 2041; exclusivities run 2027–2029 | Normal parsing (with fuzzy trade-name lookup, §8.2) |
+| **IR has workbooks, not transcripts** | Novo IR publishes quarterly Excel financial workbooks (Q2 2025 → Q2 2026 confirmed downloadable as valid .xlsx) but **no call transcripts** | IR workbooks are a first-class source; transcripts handled via §7 |
+| **Search-summary trap** | A web search summary stated Q2 adjusted sales +7% CER; the actual 6-K table showed **reported** net sales +3% CER — a reported-vs-adjusted mismatch baked into the search snippet | Search output is never trusted as a number source, for any purpose except priced-in detection |
+| **Stale lead risk / point-in-time sensitivity** | FY2025 annual showed trade receivables **−1.5%** YoY; the Q2 2026 6-K showed receivables **+25.5%** in 6 months — the newest filing flips the Channel Checker lead entirely | Resolved by trend strip + reversal-as-story + like-for-like check (§4.3) |
+| **FX rate source** | ECB data API returned official daily reference rates (e.g., DKK/EUR 7.4744 on 2026-06-30); FRED's CSV endpoint did not respond from the test machine | ECB is the FX source (§4.4) |
+
+### 8.2 Ten-company source probe (session 2)
+
+A throwaway probe ran the Librarian checklist against all 10 shortlist
+companies, 11 rival makers, and all 45 products named in the case appendix.
+**Result: no company blocks a live demo** — every company has its core
+sources, and every appendix product was found on DailyMed and in the Orange
+or Purple Book.
+
+| Company | Filer | 2 annuals | Latest Q | Prior-yr Q | Quarterly XBRL | Currency | NDC labeler codes |
+|---|---|---|---|---|---|---|---|
+| Merck | 10-K/10-Q | ✅ | Q2 '26 | ✅ | ✅ | USD | 0006 |
+| BMS | 10-K/10-Q | ✅ | Q2 '26 | ✅ | ✅ | USD | 0003 (as E.R. Squibb) |
+| Pfizer | 10-K/10-Q | ✅ | Q2 '26 | ✅ (52/53-wk) | ✅ | USD | 0069 |
+| Eli Lilly | 10-K/10-Q | ✅ | Q2 '26 | ✅ | ✅ | USD | 0002 |
+| Novo Nordisk | 20-F/6-K | ✅ | Q2 '26 | ✅ | ❌ | DKK | 0169 |
+| AbbVie | 10-K/10-Q | ✅ | Q2 '26 | ✅ | ✅ | USD | 0074 |
+| J&J | 10-K/10-Q | ✅ | Q2 '26 | ✅ (52/53-wk) | ✅ | USD | 57894 (Janssen Biotech), 50458 (Janssen Pharma) |
+| AstraZeneca | 20-F/6-K | ✅ | H1 '26 | ✅ | ❌ | USD (IFRS) | 0310 |
+| Amgen | 10-K/10-Q | ✅ | Q2 '26 | ✅ | ✅ | USD | 72511 (Amgen USA), 55513 (Amgen Inc), 58406 (Immunex — Enbrel) |
+| Gilead | 10-K/10-Q | ✅ | Q2 '26 | ✅ | ✅ | USD | 61958 |
+
+| Gotcha | What was found | Design implication |
+|---|---|---|
+| **52/53-week fiscal quarters** | Pfizer and J&J quarters end 2026-06-28 vs. 2025-06-29; a calendar-date match reported their prior-year quarter as missing | Match by fiscal period, not date (§4.0) |
+| **AstraZeneca 6-K naming is arbitrary** | 91 6-Ks in 2026; financial reports named `azn-20260630x6k.htm`, `a2999c.htm`, `tm…d1_6k.htm`; reports in USD under IFRS | Novo's `caq` naming is not a rule — content-based detection; AZ needs concept mapping but no FX |
+| **Rival makers not on EDGAR** | Roche (Tecentriq), Boehringer Ingelheim (Jardiance; private), ViiV/Shionogi (Dovato, Cabenuva, Apretude) are not SEC registrants. Novartis, Sanofi, Takeda, GSK file 20-F/6-K; Regeneron, BridgeBio, Alnylam file 10-K/10-Q | Affects 4 of 10 demo companies (Merck, BMS, AZ, Gilead). **Pre-bundle** Roche and Boehringer annual reports; use GSK's 20-F for ViiV. Pinned docs are indexed and cited identically, marked "pre-collected" in the manifest; runtime fetch of a fresher copy is attempted first |
+| **Multiple labeler codes per company** | J&J labels under two Janssen entities, Amgen under three (Enbrel as Immunex), BMS as E.R. Squibb | The labeler-code allowlist holds several codes per company |
+| **Private-label co-labelers** | Humira also labeled by Cordavis; Amjevita by Nuvaila, which was the **only** labeler found for Wezlana; Praluent labeled by both Regeneron and Sanofi | Exactly the ambiguous cases the label rule's human-pick step resolves; Wezlana's labeler needs manual verification |
+| **Orange Book trade-name suffixes** | Cabenuva is listed as `CABENUVA KIT` | Prefix/fuzzy trade-name lookup |
+| **Naive substring matching misfires** | Searching SEC company names for "ROCHE" matched "SINOPEC SHANGHAI PETROCHEMICAL" | Entity resolution by identifier (CIK, ticker, labeler code), never substring |
+| **Purple Book URLs inconsistent** | Monthly CSV names mix `january` and `February` casing | Scrape the link from the downloads page |
 
 **General implications for the architecture:**
 - The Librarian's fetch logic cannot be a one-size-fits-all SEC-only
-  assumption — it must branch per filer type (domestic 10-K/10-Q vs. foreign
-  20-F/6-K).
-- Peer comparison across currency/taxonomy boundaries (DKK/IFRS vs. USD/
-  US-GAAP) is a real, unresolved piece of engineering, not a detail — it
-  should be explicitly budgeted for in implementation.
+  assumption — it branches per filer type (domestic 10-K/10-Q vs. foreign
+  20-F/6-K) and falls back to the pinned corpus for non-EDGAR rivals.
 - Every "illustrative" number used during brainstorming before live
-  verification turned out to need correction once checked against the
-  primary document — reinforcing why the Fact Checker stage cannot be
-  skipped or weakened for speed.
+  verification needed correction once checked against the primary
+  document — and several of the probe's own first results were wrong
+  (see §9.3) — reinforcing why the Fact Checker stage cannot be skipped or
+  weakened for speed.
 
 ---
 
-## 9. Open Risks / Unknowns
+## 9. Resolved Decisions & Remaining Open Items
 
-These are unresolved as of session end and should be treated as the first
-implementation risks to retire:
+### 9.1 Resolution of the original open risks
 
-1. **Transcript sourcing** — no reliable automated fetch path exists for
-   earnings-call transcripts; third-party providers are gated. Mitigation
-   (optional upload, graceful skip) is designed but not implemented/tested.
-2. **FX + taxonomy mapping for peer comparison** — comparing an IFRS/DKK
-   filer (Novo) against a US-GAAP/USD filer (e.g., Lilly) requires currency
-   conversion and XBRL concept mapping (e.g., `Revenue` vs. `Revenues`) that
-   has not been designed in detail, only flagged.
-3. **Label/SPL filtering heuristics** — DailyMed's "pick the real labeler's
-   latest SPL" logic needs a concrete filtering rule (labeler identity +
-   version/date) that was identified but not formally specified.
-2. **Stale-vs-fresh filing conflicts** — no defined rule yet for how the
-   Fact Checker or Channel Checker should handle a lead whose supporting
-   figure is contradicted or reversed by a more recent filing (the
-   receivables -1.5% → +25.5% flip). Needs an explicit recency/seasonality
-   check, not just "use the latest filing."
-4. **Diversity-rule rebalancing mechanics** — the rule (max 2 per hunter,
-   ≥1 label/product finding) is specified, but the exact rebalancing
-   algorithm when a slate fails the rule (which finding gets bumped, how
-   ties are broken) is not fully specified.
-5. **Dedup/merge algorithm** — agreed as a necessary step, but the matching
-   logic (how "same underlying fact raised by two hunters" is detected) is
-   not specified.
-6. **Generalization beyond Novo Nordisk** — all live verification in this
-   session was done against Novo Nordisk filings only; the per-filer-type
-   branching (10-K/10-Q vs. 20-F/6-K) and taxonomy handling are designed
-   generically but validated against exactly one company so far.
-7. **Peer Agent scope at scale** — "top ~10" was chosen to bound Peer Agent
-   cost, but the actual cost/latency budget and what happens if the peer
-   universe itself has sourcing gaps (a rival's filings not fully indexed)
-   is unaddressed.
-8. **Report branding/format** — "sell-side research-note style" and
-   "branded" were directional decisions; no concrete template/visual design
-   has been produced yet.
+All open risks from session 1 were resolved in session 2:
+
+| Original open risk | Resolution | Where |
+|---|---|---|
+| Transcript sourcing | Pre-bundle ~40 transcripts from legitimate sources, re-collected before demo day; auto-fetch → bundle → upload → graceful skip | §7 |
+| FX + taxonomy mapping | Company-disclosed growth/CER only; ECB conversion for cross-company $ (period-average flows, period-end balances, native + USD shown); hand-built ~20–30 metric concept map with miss log; IR workbook as number-tie second source when XBRL is absent | §2, §4.3, §4.4 |
+| Label/SPL filtering heuristics | NDA/BLA → DailyMed → labeler-code allowlist → latest version → human pick on ambiguity; DailyMed only | §4.0 |
+| Stale-vs-fresh filing conflicts | Trend strip; reversal kept as the story; like-for-like seasonality check with prior-year quarter added to sources; unconfirmable ⇒ Medium + "possibly seasonal" | §4.3 |
+| Diversity-rule rebalancing | Hard rule on the AI's 5: greedy fill (max 2/hunter), label swap, tie-breaks, one targeted Label Lawyer retry then warning | §5.1 |
+| Dedup/merge algorithm | Fact anchor + reasoning; code groups, LLM judges within group; composite rows with per-reasoning confidence/impact; "contested" flag; split option | §4.2 |
+| Generalization beyond Novo | Live judge-picked demo ⇒ must-work. Stage-1 probe done on all 10 (all viable, fixes in §4.0/§8.2); Stage-2 plan below | §8.2, §9.2 |
+| Peer Agent scope at scale | Stays top ~10; "peer check incomplete" ⇒ no demotion; pipelining + model tiering for run time | §3.4, §4.6 |
+| Report branding/format | PHARMER RESEARCH masthead + tagline, PDF | §4.10 |
+
+### 9.2 Testing plan
+
+- **Stage 1 — source probe (done, pre-code):** verifies that the data exists
+  and what shape it's in for every company. Script and results:
+  `_bmad-output/brainstorming/brainstorm-architecture-open-questions-2026-10-17/source-probe/`.
+- **Stage 2 — output quality (post-code):** a golden set of three
+  archetypes — **Eli Lilly** (domestic, US-GAAP, USD), **Novo Nordisk**
+  (foreign, IFRS, DKK), **AstraZeneca** (foreign, IFRS, USD). Measure real
+  stage timings here (replacing §3.4 estimates) and collect the concept-map
+  miss log.
+- **Full dry run on all 10** before demo day, so judges can't pick a company
+  that has never been run.
+
+### 9.3 Recorded "AI was confidently wrong" cases
+
+The case's How-we-did-it report requires at least one; the sessions produced
+several, each caught by checking against the primary source:
+- Search-summary trap: +7% adjusted vs. +3% reported (§8.1).
+- openFDA was proposed as a backup label source, then retracted after it
+  proved to be missing Novo's own Ozempic label (§8.1).
+- The probe matched "Roche" to "Sinopec Shanghai Petrochemical" (§8.2).
+- The probe reported Pfizer's and J&J's prior-year quarters as missing — a
+  calendar-date matching bug, not a data gap (§8.2).
+
+### 9.4 Remaining open items
+
+1. **Presentation slot length** — unknown; determines whether the measured
+   run time is acceptable or the pre-cache lever (§3.4) is needed.
+2. **Real run time** — §3.4 is an estimate until Stage-2 runs.
+3. **Concept-map coverage** — whether ~20–30 metrics suffice is validated
+   by the miss log during testing.
+4. **Hunter turn cap** — exact value set during build.
+5. **Labeler allowlist completeness** — verify Wezlana's labeler (only
+   Nuvaila found) and any other private-label cases by hand.
+6. **Pre-bundle refresh** — re-collect transcripts and rival annual reports
+   shortly before demo day; confirm each transcript source is legitimately
+   usable.
+7. **Report visual template** — branding and structure are fixed; the PDF's
+   visual design is produced at build time.
 
 ---
 
 ## 10. Traceability Note
 
-This architecture is the convergence point of the brainstorming session: the
-full pipeline is fundamentally **an evidence pipeline with closed-book
+This architecture is the convergence point of two brainstorming sessions:
+the full pipeline is fundamentally **an evidence pipeline with closed-book
 citation discipline** (Librarian corpus → Hunters cite only chunk IDs → Fact
 Checker independently re-verifies → Quant agent does real, reproducible
 arithmetic). The abandoned "Phone-a-Friend" panel's intent survived as the
 Priced-In Detector. The scoring system (Materiality × Obscurity, diversity
 rule, Peer-Agent demotion) is, at bottom, one idea — *"big, and not already
 known"* — expressed through several cooperating agents rather than one.
+Session 2 added a second through-line: **conflicts in the data are kept as
+findings, and the small fixed lookups are curated by hand once** so the
+open-ended automation can run on any of the 10 companies live.
