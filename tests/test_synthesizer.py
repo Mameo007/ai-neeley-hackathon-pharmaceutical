@@ -182,6 +182,19 @@ class SynthesizerTests(StageTestCase):
         self.assertIn("APIConnectionError", out["error"])
         self.assertEqual(len(llm._client.requests), 2)
 
+    def test_missing_credential_never_raises(self):
+        class NoKeyClient(FakeClient):
+            def _stream(self, **request):
+                self.requests.append(request)
+                raise TypeError("Could not resolve authentication method.")
+
+        llm._client = NoKeyClient([])
+        with self.assertLogs("pharmer.synthesizer", level="WARNING"):
+            asyncio.run(synthesizer.run(self.run_dir))
+        out = self.output("synthesis.json")
+        self.assertEqual(out["status"], "failed")
+        self.assertIn("authentication", out["error"])
+
     def test_nothing_selected_makes_no_call(self):
         findings = json.loads(FINDINGS.read_text(encoding="utf-8"))
         for finding in findings:

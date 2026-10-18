@@ -202,8 +202,8 @@ def parse_reply(message):
 async def ask(*, run_id, stage, agent, system, output_config, user_message, validate):
     """Call Opus, validate, retry once with the problems appended to the user message.
 
-    Returns (reply, None) or (None, error). Never raises on an API error, a refusal, a
-    truncated or malformed reply, or a failed check.
+    Returns (reply, None) or (None, error). Never raises on an API error, a missing
+    credential, a refusal, a truncated or malformed reply, or a failed check.
     """
     problems, error = [], None
     for attempt in range(1, ATTEMPTS + 1):
@@ -216,7 +216,8 @@ async def ask(*, run_id, stage, agent, system, output_config, user_message, vali
                 run_id=run_id, stage=stage, agent=agent, turn=attempt, model=llm.OPUS,
                 max_tokens=MAX_TOKENS, system=system,
                 messages=[{"role": "user", "content": content}], output_config=output_config)
-        except anthropic.AnthropicError as exc:  # API errors and client setup (e.g. no key)
+        # TypeError: the SDK raises it, not an AnthropicError, when no credential is set
+        except (anthropic.AnthropicError, TypeError) as exc:
             error = f"API error: {type(exc).__name__}: {exc}"[:300]
             log.warning("%s attempt %d: %s", agent, attempt, error)
             continue  # keep the previous problems; the request never reached the model
