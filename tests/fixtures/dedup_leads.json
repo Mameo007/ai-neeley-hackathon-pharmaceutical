@@ -1,0 +1,416 @@
+[
+  {
+    "finding_id": "F-001",
+    "ticker": "NVO",
+    "anchor": {
+      "metric": "inventory",
+      "entity": "Novo Nordisk",
+      "fiscal_period": "Q2 2026",
+      "value": 41000,
+      "unit": "millions",
+      "currency": "DKK"
+    },
+    "is_label_finding": false,
+    "contested": false,
+    "lead_reasoning_id": null,
+    "reasonings": [
+      {
+        "reasoning_id": "F-001-a",
+        "hunter": "channel_checker",
+        "claim": "Inventory build-up outpaced cost of goods sold.",
+        "citations": [
+          {
+            "chunk_id": "NVO-6K-2026Q2-p28-c01",
+            "quote": "Inventories 41,000"
+          }
+        ],
+        "confidence": null,
+        "confidence_reason": null,
+        "flags": [],
+        "trend": [],
+        "impact": null,
+        "priced_in": null,
+        "score": null
+      }
+    ],
+    "peer": {
+      "status": null,
+      "note": ""
+    },
+    "status": "candidate",
+    "recommended": false
+  },
+  {
+    "finding_id": "F-002",
+    "ticker": "NVO",
+    "anchor": {
+      "metric": "trade_receivables",
+      "entity": "Novo Nordisk",
+      "fiscal_period": "Q2 2026",
+      "value": 88949,
+      "unit": "millions",
+      "currency": "DKK"
+    },
+    "is_label_finding": false,
+    "contested": false,
+    "lead_reasoning_id": null,
+    "reasonings": [
+      {
+        "reasoning_id": "F-002-a",
+        "hunter": "channel_checker",
+        "claim": "Receivables grew far faster than sales, suggesting wholesalers were loaded.",
+        "citations": [
+          {
+            "chunk_id": "NVO-6K-2026Q2-p28-c02",
+            "quote": "Trade receivables 88,949 70,856"
+          }
+        ],
+        "confidence": null,
+        "confidence_reason": null,
+        "flags": [],
+        "trend": [],
+        "impact": null,
+        "priced_in": null,
+        "score": null
+      }
+    ],
+    "peer": {
+      "status": null,
+      "note": ""
+    },
+    "status": "candidate",
+    "recommended": false
+  },
+  {
+    "finding_id": "F-003",
+    "ticker": "NVO",
+    "anchor": {
+      "metric": "revenue",
+      "entity": "Novo Nordisk",
+      "fiscal_period": "Q2 2026",
+      "value": 150000,
+      "unit": "millions",
+      "currency": "DKK"
+    },
+    "is_label_finding": false,
+    "contested": false,
+    "lead_reasoning_id": null,
+    "reasonings": [
+      {
+        "reasoning_id": "F-003-a",
+        "hunter": "channel_checker",
+        "claim": "Sales growth slowed to low single digits, pointing to softer demand.",
+        "citations": [
+          {
+            "chunk_id": "NVO-6K-2026Q2-p03-c01",
+            "quote": "Net sales 150,000"
+          }
+        ],
+        "confidence": null,
+        "confidence_reason": null,
+        "flags": [],
+        "trend": [],
+        "impact": null,
+        "priced_in": null,
+        "score": null
+      }
+    ],
+    "peer": {
+      "status": null,
+      "note": ""
+    },
+    "status": "candidate",
+    "recommended": false
+  },
+  {
+    "finding_id": "F-004",
+    "ticker": "NVO",
+    "anchor": {
+      "metric": "cost_of_sales",
+      "entity": "Novo Nordisk",
+      "fiscal_period": "Q2 2026",
+      "value": 24000,
+      "unit": "millions",
+      "currency": "DKK"
+    },
+    "is_label_finding": false,
+    "contested": false,
+    "lead_reasoning_id": null,
+    "reasonings": [
+      {
+        "reasoning_id": "F-004-a",
+        "hunter": "channel_checker",
+        "claim": "Cost of sales rose, signalling weaker pricing.",
+        "citations": [
+          {
+            "chunk_id": "NVO-6K-2026Q2-p05-c01",
+            "quote": "Cost of sales 24,000"
+          }
+        ],
+        "confidence": null,
+        "confidence_reason": null,
+        "flags": [],
+        "trend": [],
+        "impact": null,
+        "priced_in": null,
+        "score": null
+      }
+    ],
+    "peer": {
+      "status": null,
+      "note": ""
+    },
+    "status": "candidate",
+    "recommended": false
+  },
+  {
+    "finding_id": "F-005",
+    "ticker": "NVO",
+    "anchor": {
+      "metric": "trade_receivables",
+      "entity": "Novo Nordisk A/S",
+      "fiscal_period": "Q2 2026",
+      "value": 88949,
+      "unit": "millions",
+      "currency": "DKK"
+    },
+    "is_label_finding": false,
+    "contested": false,
+    "lead_reasoning_id": null,
+    "reasonings": [
+      {
+        "reasoning_id": "F-005-a",
+        "hunter": "redliner",
+        "claim": "Channel stuffing: receivables up 25% against flat sales.",
+        "citations": [
+          {
+            "chunk_id": "NVO-6K-2026Q2-p28-c02",
+            "quote": "Trade receivables 88,949 70,856"
+          },
+          {
+            "chunk_id": "NVO-6K-2026Q2-p14-c03",
+            "quote": "Trade receivables 88,949"
+          }
+        ],
+        "confidence": null,
+        "confidence_reason": null,
+        "flags": [],
+        "trend": [],
+        "impact": null,
+        "priced_in": null,
+        "score": null
+      }
+    ],
+    "peer": {
+      "status": null,
+      "note": ""
+    },
+    "status": "candidate",
+    "recommended": false
+  },
+  {
+    "finding_id": "F-006",
+    "ticker": "NVO",
+    "anchor": {
+      "metric": "trade_receivables",
+      "entity": "Novo Nordisk",
+      "fiscal_period": "H1 2026",
+      "value": 88949,
+      "unit": "millions",
+      "currency": "DKK"
+    },
+    "is_label_finding": false,
+    "contested": false,
+    "lead_reasoning_id": null,
+    "reasonings": [
+      {
+        "reasoning_id": "F-006-a",
+        "hunter": "redliner",
+        "claim": "Half-year receivables are a record high.",
+        "citations": [
+          {
+            "chunk_id": "NVO-6K-2026Q2-p28-c02",
+            "quote": "Trade receivables 88,949 70,856"
+          }
+        ],
+        "confidence": null,
+        "confidence_reason": null,
+        "flags": [],
+        "trend": [],
+        "impact": null,
+        "priced_in": null,
+        "score": null
+      }
+    ],
+    "peer": {
+      "status": null,
+      "note": ""
+    },
+    "status": "candidate",
+    "recommended": false
+  },
+  {
+    "finding_id": "F-007",
+    "ticker": "NVO",
+    "anchor": {
+      "metric": "Revenue",
+      "entity": "novo  nordisk a/s",
+      "fiscal_period": "q2 2026",
+      "value": 150000,
+      "unit": "millions",
+      "currency": "DKK"
+    },
+    "is_label_finding": true,
+    "contested": false,
+    "lead_reasoning_id": null,
+    "reasonings": [
+      {
+        "reasoning_id": "F-007-a",
+        "hunter": "footnote_miner",
+        "claim": "Sales were held back by a one-off rebate true-up, not demand.",
+        "citations": [
+          {
+            "chunk_id": "NVO-6K-2026Q2-p20-c02",
+            "quote": "rebate adjustment"
+          }
+        ],
+        "confidence": null,
+        "confidence_reason": null,
+        "flags": [],
+        "trend": [],
+        "impact": null,
+        "priced_in": null,
+        "score": null
+      }
+    ],
+    "peer": {
+      "status": null,
+      "note": ""
+    },
+    "status": "candidate",
+    "recommended": false
+  },
+  {
+    "finding_id": "F-008",
+    "ticker": "NVO",
+    "anchor": {
+      "metric": "cost_of_sales",
+      "entity": "Novo Nordisk",
+      "fiscal_period": "Q2 2026",
+      "value": 24000,
+      "unit": "millions",
+      "currency": "DKK"
+    },
+    "is_label_finding": false,
+    "contested": false,
+    "lead_reasoning_id": null,
+    "reasonings": [
+      {
+        "reasoning_id": "F-008-a",
+        "hunter": "redliner",
+        "claim": "Cost of sales fell on better pricing.",
+        "citations": [
+          {
+            "chunk_id": "NVO-6K-2026Q2-p05-c01",
+            "quote": "Cost of sales 24,000"
+          }
+        ],
+        "confidence": null,
+        "confidence_reason": null,
+        "flags": [],
+        "trend": [],
+        "impact": null,
+        "priced_in": null,
+        "score": null
+      }
+    ],
+    "peer": {
+      "status": null,
+      "note": ""
+    },
+    "status": "candidate",
+    "recommended": false
+  },
+  {
+    "finding_id": "F-009",
+    "ticker": "NVO",
+    "anchor": {
+      "metric": "rebate_provisions",
+      "entity": "Novo Nordisk",
+      "fiscal_period": "Q2 2026",
+      "value": 9000,
+      "unit": "millions",
+      "currency": "DKK"
+    },
+    "is_label_finding": false,
+    "contested": false,
+    "lead_reasoning_id": null,
+    "reasonings": [
+      {
+        "reasoning_id": "F-009-a",
+        "hunter": "channel_checker",
+        "claim": "Rebate provisions jumped.",
+        "citations": [
+          {
+            "chunk_id": "NVO-6K-2026Q2-p20-c01",
+            "quote": "Provisions 9,000"
+          }
+        ],
+        "confidence": null,
+        "confidence_reason": null,
+        "flags": [],
+        "trend": [],
+        "impact": null,
+        "priced_in": null,
+        "score": null
+      }
+    ],
+    "peer": {
+      "status": null,
+      "note": ""
+    },
+    "status": "candidate",
+    "recommended": false
+  },
+  {
+    "finding_id": "F-010",
+    "ticker": "NVO",
+    "anchor": {
+      "metric": "rebate_provisions",
+      "entity": "Novo Nordisk",
+      "fiscal_period": "Q2 2026",
+      "value": 9000,
+      "unit": "millions",
+      "currency": "DKK"
+    },
+    "is_label_finding": false,
+    "contested": false,
+    "lead_reasoning_id": null,
+    "reasonings": [
+      {
+        "reasoning_id": "F-010-a",
+        "hunter": "table_archaeologist",
+        "claim": "US rebate accruals grew faster than US sales.",
+        "citations": [
+          {
+            "chunk_id": "NVO-6K-2026Q2-p20-c01",
+            "quote": "Provisions 9,000"
+          }
+        ],
+        "confidence": null,
+        "confidence_reason": null,
+        "flags": [],
+        "trend": [],
+        "impact": null,
+        "priced_in": null,
+        "score": null
+      }
+    ],
+    "peer": {
+      "status": null,
+      "note": ""
+    },
+    "status": "candidate",
+    "recommended": false
+  }
+]
