@@ -33,7 +33,7 @@ from pharmer import synthesizer as syn
 log = logging.getLogger("orchestrator")
 
 REPO_ROOT = Path(__file__).resolve().parent
-RUNS_DIR = REPO_ROOT / "runs"
+RUNS_DIR = Path(os.environ.get("PHARMER_RUNS_DIR", REPO_ROOT / "runs"))
 CORPUS_FILES = ["manifest.json", "chunks.jsonl", "facts.jsonl"]
 CORPUS_AUDIT = "librarian_report.json"  # the Librarian's sidecar; copied when present
 # Outputs of the finish phase, cleared before a re-run so a failed re-pick never leaves the
@@ -53,6 +53,16 @@ START_STAGES = [
     ("peer", "peer", False),
     ("scoring_after_peer", "scoring", True),
 ]
+# Stages whose agent is not built. They stay in START_STAGES so the run still accounts for
+# them, but they are never scheduled and no module import is attempted: the run records
+# them as "disabled" with the reason, which is neither "ok" (the work did not happen) nor
+# "skipped" (nothing went wrong). Deleting the entries instead would hide from pipeline.json
+# that the pipeline has these stages at all. Remove a name here to turn its stage back on.
+DISABLED_STAGES = {
+    "priced_in": "the Priced-In Detector is not built, so obscurity is not assessed",
+    "peer": "the Peer Agent is not built, so findings are not compared against rivals",
+}
+
 FINISH_STAGES = [
     ("comparison", "comparison", False),
     ("synthesizer", "synthesizer", True),
@@ -119,6 +129,13 @@ async def _run_stages(run_dir, status, stages):
         entry = {"status": "running", "started_at": _now(), "seconds": 0.0, "error": None}
         status["stages"][name] = entry
         start = time.monotonic()
+        if name in DISABLED_STAGES:
+            # Before the import, so a disabled stage is never loaded or executed.
+            entry.update(status="disabled", error=None, seconds=0.0,
+                         reason=DISABLED_STAGES[name])
+            log.info("%s: disabled (%s)", name, DISABLED_STAGES[name])
+            _save(run_dir, status)
+            continue
         try:
             if isinstance(runner, str):
                 module = load_module(runner)
