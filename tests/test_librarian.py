@@ -352,6 +352,96 @@ class XbrlFactTests(unittest.TestCase):
             self.assertIn(metric, L.CONCEPT_MAP)
 
 
+class ShareConceptTests(unittest.TestCase):
+    """Diluted shares and EPS - the denominator Quant needs for `eps_pct`.
+
+    Real tag names and real figures: Lilly tags both quarterly, Novo tags neither
+    sub-annually and calls its diluted count `AdjustedWeightedAverageShares`.
+    """
+
+    facts_for = XbrlFactTests.facts_for
+
+    def test_unit_fields_decides_scale_and_currency_per_kind(self):
+        # A money amount scales to millions and keeps its currency.
+        self.assertEqual(L._unit_fields("currency", "USD"), (L.FACT_SCALE, "millions", "USD"))
+        # A share count scales to millions of shares and has no currency.
+        self.assertEqual(L._unit_fields("shares", "shares"), (L.FACT_SCALE, "millions", None))
+        # A per-share amount is carried through: dividing EPS by a million destroys it.
+        self.assertEqual(L._unit_fields("per_share", "USD/shares"), (1, "per_share", "USD"))
+        self.assertEqual(L._unit_fields("per_share", "DKK/shares"), (1, "per_share", "DKK"))
+        # A unit that cannot express the metric is refused, so its rows are skipped.
+        self.assertIsNone(L._unit_fields("currency", "shares"))
+        self.assertIsNone(L._unit_fields("shares", "USD"))
+        self.assertIsNone(L._unit_fields("per_share", "USD"))
+        self.assertIsNone(L._unit_fields("currency", "pure"))
+
+    def test_us_gaap_diluted_shares_and_eps(self):
+        facts, _misses, _skipped = self.facts_for("LLY", {"us-gaap": {
+            "WeightedAverageNumberOfDilutedSharesOutstanding": {"units": {"shares": [
+                duration("2026-04-01", "2026-06-30", 893_700_000)]}},
+            "EarningsPerShareDiluted": {"units": {"USD/shares": [
+                duration("2026-04-01", "2026-06-30", 7.94)]}}}})
+        by_metric = {f["metric"]: f for f in facts}
+        shares, eps = by_metric["diluted_shares"], by_metric["diluted_eps"]
+        self.assertEqual((shares["value"], shares["unit"], shares["currency"]),
+                         (893.7, "millions", None))
+        self.assertEqual((eps["value"], eps["unit"], eps["currency"]),
+                         (7.94, "per_share", "USD"))
+        self.assertEqual(shares["fiscal_period"], "Q2 2026")
+        self.assertEqual(eps["fact_id"], "LLY-xbrl-diluted_eps-2026Q2")
+
+    def test_ifrs_diluted_shares_and_eps(self):
+        # Novo's diluted count is AdjustedWeightedAverageShares, in DKK/shares for EPS.
+        facts, _misses, _skipped = self.facts_for("NVO", {"ifrs-full": {
+            "AdjustedWeightedAverageShares": {"units": {"shares": [
+                duration("2025-01-01", "2025-12-31", 4_447_700_000)]}},
+            "DilutedEarningsLossPerShare": {"units": {"DKK/shares": [
+                duration("2025-01-01", "2025-12-31", 23.03)]}}}})
+        by_metric = {f["metric"]: f for f in facts}
+        self.assertEqual(by_metric["diluted_shares"]["value"], 4447.7)
+        self.assertEqual(by_metric["diluted_eps"]["value"], 23.03)
+        self.assertEqual(by_metric["diluted_eps"]["currency"], "DKK")
+        for fact in by_metric.values():
+            self.assertEqual(fact["fiscal_period"], "FY2025")
+
+    def test_the_basic_share_count_is_not_used_as_the_diluted_one(self):
+        # WeightedAverageShares is Novo's *basic* count; standing it in for the diluted
+        # count would overstate EPS impact on every finding.
+        facts, misses, _skipped = self.facts_for("NVO", {"ifrs-full": {
+            "WeightedAverageShares": {"units": {"shares": [
+                duration("2025-01-01", "2025-12-31", 4_463_000_000)]}}}})
+        self.assertEqual([f for f in facts if f["metric"] == "diluted_shares"], [])
+        self.assertIn("diluted_shares", [m["metric"] for m in misses])
+
+    def test_an_annual_only_filer_emits_no_quarterly_denominator(self):
+        # The coverage gap Quant must report instead of substituting an annual count.
+        facts, _misses, _skipped = self.facts_for("NVO", {"ifrs-full": {
+            "AdjustedWeightedAverageShares": {"units": {"shares": [
+                duration("2024-01-01", "2024-12-31", 4_463_000_000),
+                duration("2025-01-01", "2025-12-31", 4_447_700_000)]}}}})
+        periods = {f["fiscal_period"] for f in facts if f["metric"] == "diluted_shares"}
+        self.assertEqual(periods, {"FY2024", "FY2025"})
+        self.assertFalse([p for p in periods if p.startswith(("Q", "H"))])
+
+    def test_a_money_metric_still_ignores_share_units(self):
+        # Adding the share kinds must not let `shares` rows into a currency metric.
+        facts, _misses, skipped = self.facts_for("LLY", {"us-gaap": {"Revenues": {"units": {
+            "USD": [duration("2026-04-01", "2026-06-30", 22_974_000_000)],
+            "shares": [duration("2026-04-01", "2026-06-30", 893_700_000)]}}}})
+        revenue = [f for f in facts if f["metric"] == "revenue"]
+        self.assertEqual([f["value"] for f in revenue], [22974.0])
+        self.assertEqual(skipped, 1)
+
+    def test_every_share_fact_keeps_its_provenance(self):
+        facts, _misses, _skipped = self.facts_for("LLY", {"us-gaap": {
+            "EarningsPerShareDiluted": {"units": {"USD/shares": [
+                duration("2026-04-01", "2026-06-30", 7.94)]}}}})
+        eps = next(f for f in facts if f["metric"] == "diluted_eps")
+        self.assertEqual(eps["doc_id"], "LLY-XBRL")
+        self.assertEqual(eps["source_kind"], "xbrl")
+        self.assertEqual(eps["period_end"], "2026-06-30")
+
+
 class CorpusTests(unittest.TestCase):
     """End-to-end `build_corpus` runs against a fake EDGAR."""
 
