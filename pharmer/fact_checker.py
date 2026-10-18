@@ -463,6 +463,15 @@ class CorpusIndex:
         owner = self.owner(doc_id)
         return bool(owner and ticker) and owner != str(ticker).upper()
 
+    def places(self, doc_id, ticker):
+        """True when the manifest positively places `doc_id` with `ticker`.
+
+        The mirror of `is_other_company`, for the one decision that must not be made on
+        an absence: granting High. Unknown ownership is read, but never certified.
+        """
+        owner = self.owner(doc_id)
+        return bool(owner and ticker) and owner == str(ticker).upper()
+
     def facts_for(self, ticker):
         """The subject company's facts; rows with an unattributable doc_id are kept."""
         key = str(ticker or "").upper()
@@ -548,12 +557,20 @@ def _load_corpus(run_dir):
 # number tie
 
 
-def _tie(anchor, facts):
+def _tie(anchor, facts, attributed=None):
     """Number-tie verdict for one anchor against facts.jsonl.
+
+    `attributed(fact)` says whether the manifest places that fact's document with the
+    subject company. A fact nobody can place is still read - not knowing the owner is not
+    evidence of a different owner - but it cannot *grant* a tie, because the whole value of
+    the number-tie rule is that the second artifact is known to be about this company.
 
     Returns (status, fact_id, detail) where status is:
       `reproduced`   - a fact for the same metric, period, unit and currency agrees
                        numerically at the precision the two sources support;
+      `unattributed` - such a fact agrees, but the manifest cannot place its document with
+                       the subject company, so the agreement is unconfirmable: Medium, and
+                       never a High that rests on evidence of unknown ownership;
       `contradicted` - such a fact exists and disagrees beyond that precision;
       `mismatch`     - the value ties to a fact of a *different* period, unit or currency,
                        which is the wrong-column / wrong-period extraction error the rule
@@ -599,6 +616,11 @@ def _tie(anchor, facts):
             return ("unavailable", fact.get("fact_id"),
                     f"{fact.get('fact_id')} and the anchor agree numerically, but the "
                     f"unit or currency is missing on one of them")
+        if attributed is not None and not attributed(fact):
+            return ("unattributed", fact.get("fact_id"),
+                    f"{fact.get('fact_id')} = {fact.get('value')} agrees with the anchor, "
+                    f"but manifest.json does not place {fact.get('doc_id')} with "
+                    f"{anchor.get('entity') or 'the subject company'}")
         return ("reproduced", fact.get("fact_id"),
                 f"{fact.get('fact_id')} = {fact.get('value')} reproduces the anchor at "
                 f"{min(fact_value[1], target[1])} dp")
@@ -855,6 +877,10 @@ def _confidence(checks):
         reasons.append(f"number-tie reproduces ({checks['tie_detail']})")
     elif tie == "unavailable":
         reasons.append(f"no second source ({checks['tie_detail']})")
+    elif tie == "unattributed":
+        # Agreement from a document of unknown ownership is not the cross-source
+        # verification Contract 2 asks for, so it cannot carry a finding to High.
+        reasons.append(f"second source unattributed ({checks['tie_detail']})")
     elif tie == "not_applicable":
         reasons.append(f"no number-tie applies ({checks['tie_detail']})")
     else:
@@ -938,7 +964,8 @@ async def check_reasoning(run_id, finding, reasoning, corpus, gate=None):
     quote, quote_detail, value_in_evidence = _check_citations(reasoning, corpus, anchor)
     hits = corpus.hits(anchor.get("metric"), ticker)
     trend = _trend(anchor, facts, hits)
-    tie, tie_fact_id, tie_detail = _tie(anchor, facts)
+    tie, tie_fact_id, tie_detail = _tie(
+        anchor, facts, attributed=lambda fact: corpus.places(fact.get("doc_id"), ticker))
     anchor_period = _norm_period(anchor.get("fiscal_period"))
     reversal = _reversal(trend, anchor_period)
     like_for_like, like_detail = _like_for_like(anchor, trend, reversal)
