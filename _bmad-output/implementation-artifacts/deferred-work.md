@@ -103,3 +103,6 @@ existing entries.
 - source_spec: `_bmad-output/implementation-artifacts/spec-report-pdf.md`
   summary: Mark footnotes whose page is an inferred ordinal rather than the filing's printed page.
   evidence: Librarian keeps this in librarian_report.json (not Contract 1); the report prints p.N either way. Needs a contract field.
+- source_spec: `_bmad-output/implementation-artifacts/spec-repo-orchestrator.md`
+  summary: Show pipeline stage skips/degradations (e.g. "Fact Checker not built: confidence unchecked") in the report PDF.
+  evidence: Blind review — they live only in pipeline.json and the console; the report reads no stage status.
