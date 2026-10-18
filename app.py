@@ -15,6 +15,7 @@ import threading
 from pathlib import Path
 
 import streamlit as st
+import streamlit.components.v1 as components
 
 import orchestrator
 from pharmer import librarian, report, scoring
@@ -123,6 +124,33 @@ h2, h3 { letter-spacing: -0.3px; }
 .pharmer-card.stopped { border-color: #ff5d5d; }
 .pharmer-card.stopped .state { color: #ff5d5d; }
 @media (max-width: 1000px) { .pharmer-cards { grid-template-columns: repeat(2, 1fr); } }
+/* Result screen */
+.st-key-needle-card, .st-key-ceo-card { background: #11161d; border: 1px solid #232b37;
+  border-radius: 14px; padding: 26px 30px; }
+.st-key-ceo-card { background: #161c25; }
+.pharmer-label { font-family: var(--pharmer-mono); font-size: 0.8rem; letter-spacing: 2.5px;
+  color: #ffb020; text-transform: uppercase; }
+.pharmer-headline { font-size: 1.9rem; font-weight: 650; line-height: 1.25; margin-top: 8px;
+  letter-spacing: -0.3px; }
+.pharmer-number-caption { color: #8a94a3; font-size: 0.95rem; margin-top: -6px; }
+.pharmer-verdict { font-size: 1.05rem; line-height: 1.5; }
+.pharmer-chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 4px; }
+.pharmer-chip { font-family: var(--pharmer-mono); font-size: 0.75rem; border-radius: 99px;
+  padding: 4px 11px; background: #1b222c; color: #8a94a3; }
+.pharmer-chip.g { background: rgba(53, 208, 127, .14); color: #35d07f; }
+.pharmer-chip.a { background: rgba(255, 176, 32, .14); color: #ffb020; }
+.pharmer-chip.r { background: rgba(255, 93, 93, .14); color: #ff5d5d; }
+.pharmer-quote { font-family: Georgia, 'Times New Roman', serif; font-size: 1.15rem;
+  line-height: 1.5; border-left: 3px solid #ffb020; background: #0d1117; padding: 14px 20px;
+  border-radius: 0 10px 10px 0; margin: 12px 0 8px; color: #e8eaed; }
+.pharmer-source { display: inline-block; font-family: var(--pharmer-mono); font-size: 0.78rem;
+  color: #4ea1ff; border: 1px solid #23406a; border-radius: 6px; padding: 4px 10px; }
+.pharmer-ceo .title { font-size: 1.35rem; font-weight: 650; margin: 6px 0 4px; }
+.pharmer-ceo .row { border-top: 1px solid #232b37; padding: 11px 0; }
+.pharmer-ceo .key { font-family: var(--pharmer-mono); font-size: 0.72rem; letter-spacing: 2px;
+  color: #8a94a3; text-transform: uppercase; }
+.pharmer-ceo .val { font-size: 0.98rem; line-height: 1.45; margin-top: 3px; }
+.pharmer-why { font-size: 0.92rem; color: #b4bcc8; }
 .pharmer-card.ok .state { color: #35d07f; font-size: 1.1rem; }
 .pharmer-card.running { border: 2px solid #ffb020; background: #17140c;
   animation: pharmer-pulse 1.6s ease-in-out infinite; }
@@ -388,6 +416,124 @@ def cards_html(cards):
     return '<div class="pharmer-cards">' + "".join(out) + "</div>"
 
 
+def _num(value, decimals=1):
+    """1234.5 -> "1,234.5"; 420.0 -> "420" (no trailing zeros)."""
+    text = f"{value:,.{decimals}f}"
+    return text.rstrip("0").rstrip(".") if "." in text else text
+
+
+def _signed(value):
+    return ("−" if value < 0 else "+") + _num(abs(value), 2)
+
+
+def anchor_number(anchor):
+    """The anchor's value as reported, e.g. "DKK 87,123m"; None when it has no number."""
+    anchor = anchor or {}
+    value = anchor.get("value")
+    if not isinstance(value, (int, float)) or isinstance(value, bool):
+        return None
+    currency = anchor.get("currency")
+    currency = "" if not currency or str(currency).lower() == "none" else f"{currency} "
+    unit = anchor.get("unit") or ""
+    short = {"millions": "m", "billions": "bn", "thousands": "k", "percent": "%"}.get(unit)
+    return (f"{currency}{_num(value, 2)}{short}" if short is not None
+            else f"{currency}{_num(value, 2)} {unit}".strip())
+
+
+def big_number(reasoning, anchor):
+    """The result's one big number: Quant's impact.usd_m, else impact.eps_pct, else the
+    finding's anchor value as reported. {"text", "caption", "basis"}, or None — never made up."""
+    impact = reasoning.get("impact") or {}
+    usd, eps = impact.get("usd_m"), impact.get("eps_pct")
+    if usd is not None:
+        sign, usd_abs = "−" if usd < 0 else "+", round(abs(usd), 1)
+        text = (f"{sign}${_num(usd_abs / 1000)}bn" if usd_abs >= 1000
+                else f"{sign}${_num(usd_abs)}m")
+        return {"text": text, "basis": "quant",
+                "caption": "estimated impact, US dollars"
+                           + (f" · {_signed(eps)}% of earnings per share" if eps is not None
+                              else "")}
+    if eps is not None:
+        return {"text": f"{_signed(eps)}%", "basis": "quant",
+                "caption": "estimated impact on earnings per share"}
+    text = anchor_number(anchor)
+    if text is None:
+        return None
+    what = ", ".join(str(anchor[k]).replace("_", " ") for k in ("metric", "fiscal_period")
+                     if anchor.get(k))
+    return {"text": text, "basis": "anchor",
+            "caption": f"{what} · as reported; impact not sized yet"}
+
+
+def _strongest(finding):
+    """The reasoning scoring ranks the finding by (highest score), else the lead reasoning;
+    only selected reasonings count when the finding has any."""
+    reasonings = [r for r in finding.get("reasonings") or [] if isinstance(r, dict)]
+    reasonings = [r for r in reasonings if r.get("selected") is True] or reasonings
+    scored = [r for r in reasonings if isinstance(r.get("score"), (int, float))]
+    if scored:
+        return max(scored, key=lambda r: r["score"])
+    return next((r for r in reasonings if r.get("reasoning_id") == finding.get("lead_reasoning_id")),
+                reasonings[0] if reasonings else {})
+
+
+CEO_LABELS = {"Action": "The move", "Trade-off": "Trade-off",
+              "Downside if wrong": "What would prove us wrong", "Why it works": "Why it works"}
+
+
+def result_model(run_dir):
+    """Everything the result screen shows, from the run's files via report.build_model:
+    {"needle", "headline", "number", "verdict", "priced_in", "badge", "quote", "ceo"}."""
+    model = report.build_model(run_dir)
+    findings = syn.read_json_or_none(Path(run_dir) / "findings.json") or []
+    needle = model["thesis"]["needle"]
+    finding = next((f for f in findings if isinstance(f, dict) and f.get("finding_id") == needle),
+                   {})
+    reasoning = _strongest(finding) if finding else {}
+    row = next((r for r in model["findings"] if r["finding_id"] == needle), None)
+    shown = None
+    if row and row["reasonings"]:
+        shown = next((r for r in row["reasonings"]
+                      if r["reasoning_id"] == reasoning.get("reasoning_id")), row["reasonings"][0])
+    sources = {n["number"]: n["text"] for n in model["footnotes"]}
+    quote = None
+    if shown and shown["quotes"]:
+        q = shown["quotes"][0]
+        quote = {"text": q["text"], "source": "; ".join(sources[n] for n in q["notes"])}
+    callout = model["ceo_move"]
+    fields = dict(callout["fields"])
+    return {"needle": needle,
+            "headline": reasoning.get("claim") or model["thesis"]["headline"],
+            "number": big_number(reasoning, finding.get("anchor")) if finding else None,
+            "verdict": model["thesis"]["verdict"], "priced_in": model["thesis"]["priced_in"],
+            "verdict_note": next((w for w in model["warnings"]
+                                  if w.startswith(("Synthesizer", "synthesis.json"))), None),
+            "ai_pick": bool(needle) and model["thesis"]["needle_source"] != "human",
+            "badge": shown["badge"] if shown else None, "quote": quote,
+            "ceo": {"status": callout["status"], "error": callout["error"],
+                    "stale": callout["stale"], "timeframe": fields.get("Timeframe") or "",
+                    "fields": [(CEO_LABELS[label], text) for label, text in callout["fields"]
+                               if label in CEO_LABELS and text]}}
+
+
+def quote_html(text, source=None):
+    """A verbatim quote as a serif blockquote (escaped, line breaks kept) plus its source chip."""
+    body = html.escape(text).replace("\n", "<br>")
+    return (f'<div class="pharmer-quote">“{body}”</div>'
+            + (f'<span class="pharmer-source">{html.escape(source)}</span>' if source else ""))
+
+
+def why_line(r):
+    """The one-line verdict on why a reasoning was selected, in plain words from its numbers."""
+    impact = ("impact not sized yet" if r["materiality"] is None
+              else f"moves earnings per share by about {_num(r['materiality'], 2)}%")
+    hits = r["priced_in_hits"]
+    news = ("not yet checked against the news" if hits is None
+            else "no matching news stories found" if hits == 0
+            else f"already in {hits} news {'story' if hits == 1 else 'stories'}")
+    return f"{impact[0].upper()}{impact[1:]}; {news}."
+
+
 def stage_problems(status):
     """Stages that did not simply succeed, for the warning above the stage table."""
     return [(name, e.get("status"), e.get("error")) for name, e in status.get("stages", {}).items()
@@ -562,17 +708,18 @@ def reasoning_block(r):
             st.badge(r["badge"], color=BADGE_COLORS.get(r["badge"], "gray"))
         cols[1].markdown(md(r["claim"]) + (f"  \n*{', '.join(r['labels'])}*"
                                            if r["labels"] else ""))
+        st.html(f'<div class="pharmer-why">{html.escape(why_line(r))}</div>')
         score = "–" if r["score"] is None else r["score"]
         materiality = "–" if r["materiality"] is None else r["materiality"]
         hits = "not checked" if r["priced_in_hits"] is None else r["priced_in_hits"]
-        st.caption(f"Why selected: score {score} = materiality {materiality} "
-                   f"(|EPS impact %|) × obscurity {r['obscurity']} (priced-in hits: {hits})"
-                   f" · raised by {', '.join(h for h in r['hunters'] if h)}"
-                   + (f" · confidence: {md(r['confidence_reason'])}"
-                      if r.get("confidence_reason") else ""))
+        with st.expander("How we scored it"):
+            st.caption(f"Score {score} = materiality {materiality} (|EPS impact %|) × obscurity "
+                       f"{r['obscurity']} (priced-in hits: {hits})"
+                       f" · raised by {', '.join(h for h in r['hunters'] if h)}"
+                       + (f" · confidence: {md(r['confidence_reason'])}"
+                          if r.get("confidence_reason") else ""))
         for q in r["quotes"]:
-            quote = md(q["text"]).replace("\n", "  \n> ")
-            st.markdown(f"> “{quote}”  \n> — {md('; '.join(q['sources']))}")
+            st.html(quote_html(q["text"], "; ".join(q["sources"])))
 
 
 def review_section(run_dir, ticker):
@@ -621,23 +768,99 @@ def review_section(run_dir, ticker):
             _open(Path(run_dir).name)
 
 
-def results_section(run_dir):
-    synthesis = syn.read_json_or_none(Path(run_dir) / "synthesis.json") or {}
-    move = syn.read_json_or_none(Path(run_dir) / "ceo_move.json") or {}
-    st.subheader("Result")
-    if synthesis.get("status") == "ok":
-        st.markdown(f"**Verdict:** {md(synthesis['verdict'])}")
-    elif synthesis:
-        st.warning(f"No verdict: {synthesis.get('error') or 'Synthesizer failed'}")
-    if move.get("status") == "ok":
-        st.markdown(f"**CEO move:** {md(move['action'])} *({md(move['timeframe'])})*")
-    elif move:
-        st.warning(f"No CEO move: {move.get('error') or 'CEO Move failed'}")
+def count_up(text):
+    """The big number, counting up from 0 to its final text (which is shown verbatim at the
+    end, and straight away for viewers who prefer reduced motion)."""
+    components.html(f"""<div id="n">{html.escape(text)}</div>
+<style>body {{ margin: 0; background: transparent; }}
+#n {{ font: 700 min(76px, 11vw) 'SF Mono', Menlo, 'JetBrains Mono', monospace;
+      color: #ffb020; letter-spacing: -2px; line-height: 1.1; white-space: nowrap; }}</style>
+<script>
+const el = document.getElementById("n"), final = el.textContent;
+const m = final.match(/\d[\d,]*(\.\d+)?/);
+if (m && !matchMedia("(prefers-reduced-motion: reduce)").matches) {{
+  const d = m[1] ? m[1].length - 1 : 0, v = parseFloat(m[0].replace(/,/g, "")), t0 = performance.now();
+  const step = (t) => {{
+    const k = Math.min(1, (t - t0) / 1200), e = 1 - Math.pow(1 - k, 3);
+    el.textContent = k < 1 ? final.replace(m[0], (v * e).toLocaleString("en-US",
+      {{minimumFractionDigits: d, maximumFractionDigits: d}})) : final;
+    if (k < 1) requestAnimationFrame(step);
+  }};
+  requestAnimationFrame(step);
+}}
+</script>""", height=84)
+
+
+def ceo_html(ceo):
+    rows = "".join(f'<div class="row"><div class="key">{html.escape(k)}</div>'
+                   f'<div class="val">{html.escape(v)}</div></div>' for k, v in ceo["fields"])
+    title = "CEO decision" + (f" · {ceo['timeframe']}" if ceo["timeframe"] else "")
+    return (f'<div class="pharmer-ceo"><div class="pharmer-label">◆ If we ran the company</div>'
+            f'<div class="title">{html.escape(title)}</div>{rows}</div>')
+
+
+def results_section(run_dir, ticker):
+    """The hero result: the Sharpest Needle, its big number and evidence, and the CEO card."""
+    try:
+        res = result_model(run_dir)
+    except (OSError, ValueError, KeyError, TypeError, AttributeError) as exc:
+        # A broken findings.json must not hide the stage diagnostics below, or the PDF.
+        logging.getLogger("app").exception("result screen for %s", run_dir)
+        st.error(f"The result screen could not read this run's files ({type(exc).__name__}). "
+                 "The report and the agents' details are below.")
+        _pdf_button(run_dir)
+        return
+    company = librarian.CIKS.get(ticker, (None, ticker or ""))[1]
+    st.html(f'<div class="pharmer-run-head"><span class="pharmer-ticker">{html.escape(ticker or "")}'
+            f'</span><span class="title">{html.escape(company)} · the result</span></div>')
+    left, right = st.columns([3, 2], gap="medium")
+    with left, st.container(key="needle-card"):
+        if res["needle"]:
+            pick = (" · AI pick, not yet confirmed by the analyst" if res["ai_pick"] else "")
+            st.html(f'<div class="pharmer-label">◆ Sharpest Needle · {html.escape(res["needle"])}'
+                    f'{html.escape(pick)}</div>'
+                    f'<div class="pharmer-headline">{html.escape(res["headline"])}</div>')
+            if res["number"]:
+                count_up(res["number"]["text"])
+                st.html(f'<div class="pharmer-number-caption">'
+                        f'{html.escape(res["number"]["caption"])}</div>')
+        else:
+            st.warning("No Sharpest Needle for this run: no findings were selected.")
+        if res["verdict"]:
+            st.html(f'<div class="pharmer-verdict">{html.escape(res["verdict"])}</div>')
+        elif res["verdict_note"]:
+            st.warning(f"No verdict: {res['verdict_note']}")
+        chips = []
+        if res["badge"] == "Unverified":
+            chips.append('<span class="pharmer-chip r">not yet fact-checked</span>')
+        elif res["badge"]:
+            tone = {"High": "g", "Low": "r"}.get(res["badge"], "")
+            chips.append(f'<span class="pharmer-chip {tone}">'
+                         f'Fact Checker: {html.escape(res["badge"])} confidence</span>')
+        if res["priced_in"]:
+            chips.append(f'<span class="pharmer-chip a">market: {html.escape(res["priced_in"])}'
+                         "</span>")
+        if chips or res["quote"]:
+            st.html(f'<div class="pharmer-chips">{"".join(chips)}</div>'
+                    + (quote_html(res["quote"]["text"], res["quote"]["source"])
+                       if res["quote"] else ""))
+    with right, st.container(key="ceo-card"):
+        ceo = res["ceo"]
+        if ceo["status"] == "ok":
+            st.html(ceo_html(ceo))
+            if ceo["stale"]:
+                st.warning(ceo["stale"])
+        else:
+            st.warning(f"No CEO move: {ceo['error']}")
+        _pdf_button(run_dir)
+
+
+def _pdf_button(run_dir):
     pdf = Path(run_dir) / "report.pdf"
     if pdf.is_file():
-        st.download_button("Download report (PDF)", pdf.read_bytes(),
+        st.download_button("⬇ Download the CEO report (PDF)", pdf.read_bytes(),
                            file_name=f"pharmer-{Path(run_dir).name}.pdf",
-                           mime="application/pdf", type="primary")
+                           mime="application/pdf", type="primary", use_container_width=True)
     else:
         st.error("No report.pdf for this run (see the stage table).")
 
@@ -661,7 +884,7 @@ def show_run(run):
     if status.get("error"):
         st.error(f"The background job crashed: {status['error']}")
     if run["phase"] == "done":
-        results_section(run_dir)
+        results_section(run_dir, run["ticker"])
     stage_warning(status)
     trouble = run["phase"] in ("failed", "interrupted")
     with st.expander("The agents", expanded=trouble):

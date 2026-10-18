@@ -25,6 +25,11 @@ CASE_NAMES = {"MRK": "Merck", "BMY": "Bristol Myers Squibb", "PFE": "Pfizer", "L
               "AZN": "AstraZeneca", "AMGN": "Amgen", "GILD": "Gilead"}  # as the appendix spells them
 RUN_FILES = {"findings.json": "synthesis_findings.json", "run.json": "synthesis_run.json",
              "manifest.json": "report_manifest.json", "chunks.jsonl": "report_chunks.jsonl"}
+def html_text(at):
+    """Everything the page rendered through st.html."""
+    return " ".join(e.proto.body for e in at.get("html"))
+
+
 START_DONE = {"scoring_after_peer": {"status": "ok", "seconds": 0.0, "error": None}}
 
 
@@ -230,6 +235,101 @@ class AgentCardTests(AppTestCase):
         self.assertIn("↳ &lt;i&gt;", out)
 
 
+class ResultTests(AppTestCase):
+    ANCHOR = {"metric": "trade_receivables", "fiscal_period": "H1 2026", "value": 87123,
+              "unit": "millions", "currency": "DKK"}
+
+    def test_big_number_prefers_usd_then_eps_then_the_anchor(self):
+        impact = {"impact": {"usd_m": -420.0, "eps_pct": -1.8}}
+        self.assertEqual(app.big_number(impact, self.ANCHOR),
+                         {"text": "−$420m", "basis": "quant",
+                          "caption": "estimated impact, US dollars · −1.8% of earnings per share"})
+        self.assertEqual(app.big_number({"impact": {"usd_m": 18100.0}}, self.ANCHOR)["text"],
+                         "+$18.1bn")
+        eps = app.big_number({"impact": {"usd_m": None, "eps_pct": 2.25}}, self.ANCHOR)
+        self.assertEqual((eps["text"], eps["caption"]),
+                         ("+2.25%", "estimated impact on earnings per share"))
+        fallback = app.big_number({"impact": None}, self.ANCHOR)
+        self.assertEqual((fallback["text"], fallback["basis"]), ("DKK 87,123m", "anchor"))
+        self.assertEqual(fallback["caption"],
+                         "trade receivables, H1 2026 · as reported; impact not sized yet")
+        self.assertIsNone(app.big_number({}, {"metric": "x", "value": None}))  # never invented
+        self.assertEqual(app.big_number({"impact": {"usd_m": 999.96}}, None)["text"], "+$1bn")
+        self.assertEqual(app.big_number({"impact": {"usd_m": 999.4}}, None)["text"], "+$999.4m")
+
+    def test_anchor_number_formats(self):
+        self.assertEqual(app.anchor_number({"value": 1.5, "unit": "mg", "currency": "none"}),
+                         "1.5 mg")
+        self.assertEqual(app.anchor_number({"value": 12.0, "unit": "percent"}), "12%")
+        self.assertEqual(app.anchor_number({"value": 2.5, "unit": "billions",
+                                            "currency": "USD"}), "USD 2.5bn")
+        self.assertIsNone(app.anchor_number({"value": True}))
+
+    def test_strongest_reasoning_by_score_else_lead(self):
+        f = {"lead_reasoning_id": "F-1-b", "reasonings": [
+            {"reasoning_id": "F-1-a", "score": 0.3}, {"reasoning_id": "F-1-b", "score": 4.0}]}
+        self.assertEqual(app._strongest(f)["reasoning_id"], "F-1-b")
+        for r in f["reasonings"]:
+            r["score"] = None
+        self.assertEqual(app._strongest(f)["reasoning_id"], "F-1-b")
+        self.assertEqual(app._strongest({"reasonings": []}), {})
+        f["reasonings"][0].update(selected=True, score=0.3)
+        f["reasonings"][1].update(selected=False, score=9.0)  # higher, but not selected
+        self.assertEqual(app._strongest(f)["reasoning_id"], "F-1-a")
+
+    def test_result_model_on_a_done_run(self):
+        run_dir = self.make_run("NVO-20261018-0100", "done", "x", done=True)
+        res = app.result_model(run_dir)
+        self.assertEqual((res["needle"], res["headline"]),
+                         ("F-003", "Illustrative: inventory 333 built up."))
+        self.assertEqual(res["number"]["text"], "−2.5%")
+        self.assertEqual(res["quote"], {"text": "Inventories 333",
+                                        "source": "Novo Nordisk Q2 2026 6-K, p.14"})
+        self.assertEqual(res["ceo"]["timeframe"], "next two quarters")
+        self.assertEqual([k for k, _ in res["ceo"]["fields"]],
+                         ["The move", "Trade-off", "What would prove us wrong", "Why it works"])
+        self.assertEqual(res["priced_in"], "partly priced in")
+
+    def test_result_page_failure_paths(self):
+        run_dir = self.make_run("NVO-20261018-0100", "done", "x", done=True)
+        (run_dir / "ceo_move.json").unlink()
+        (run_dir / "run.json").write_text("{}", encoding="utf-8")  # AI-recommended fallback
+        synthesis = json.loads((run_dir / "synthesis.json").read_text())
+        synthesis["citations"] = ["F-999"]  # stale: cites a finding no longer selected
+        (run_dir / "synthesis.json").write_text(json.dumps(synthesis), encoding="utf-8")
+        at = PageTests.page(self, "NVO-20261018-0100")
+        self.assertFalse(at.exception)
+        self.assertIn("AI pick, not yet confirmed by the analyst", html_text(at))
+        warnings = " ".join(w.value for w in at.warning)
+        self.assertIn("No verdict: synthesis.json is out of date", warnings)
+        self.assertIn("No CEO move: CEO Move has not run", warnings)
+        (run_dir / "findings.json").write_text("{not json", encoding="utf-8")
+        at = PageTests.page(self, "NVO-20261018-0100")
+        self.assertIn("could not read this run's files", at.error[0].value)
+        self.assertEqual(at.expander[-1].label, "Details")  # diagnostics still shown
+
+    def test_result_model_without_selected_findings(self):
+        run_dir = self.make_run("NVO-20261018-0100", "done", "x", done=True)
+        (run_dir / "findings.json").write_text("[]", encoding="utf-8")
+        res = app.result_model(run_dir)
+        self.assertIsNone(res["needle"])
+        self.assertIsNone(res["number"])
+        self.assertIsNone(res["quote"])
+
+    def test_why_line_and_quote_html(self):
+        r = {"materiality": 4.5, "priced_in_hits": 0}
+        self.assertEqual(app.why_line(r),
+                         "Moves earnings per share by about 4.5%; no matching news stories found.")
+        self.assertEqual(app.why_line({"materiality": None, "priced_in_hits": None}),
+                         "Impact not sized yet; not yet checked against the news.")
+        self.assertIn("already in 1 news story", app.why_line({"materiality": 1,
+                                                                "priced_in_hits": 1}))
+        out = app.quote_html("$1.2 <b>bn</b>\nnext", "src & co")
+        self.assertIn("“$1.2 &lt;b&gt;bn&lt;/b&gt;<br>next”", out)
+        self.assertIn("src &amp; co", out)
+        self.assertNotIn("\\", out)
+
+
 class CompanyTileTests(unittest.TestCase):
     def test_tiles_follow_the_shortlist_with_threads_and_ready_badge(self):
         tiles = app.company_tiles()
@@ -357,16 +457,23 @@ class PageTests(AppTestCase):
         product = next(s for s in at.selectbox if s.label == "Product")
         self.assertEqual(product.value, app.NOT_CONFIRMED)
         self.assertEqual(product.options, app.product_options("NVO"))
-        text = " ".join(m.value for m in at.markdown)
-        self.assertIn(app.md("Novo Nordisk Q2 2026 6-K, p.14"), text)  # rendered literally
+        self.assertIn("Novo Nordisk Q2 2026 6-K, p.14", html_text(at))  # source chip, verbatim
+        self.assertIn("“Trade receivables 111”", html_text(at))  # serif quote, no backslashes
+        self.assertIn("How we scored it", [e.label for e in at.expander])
 
     def test_done_run_shows_verdict(self):
         self.make_run("NVO-20261018-0100", "done", "x", done=True)
         at = self.page("NVO-20261018-0100")
         self.assertFalse(at.exception)
-        text = " ".join(m.value for m in at.markdown)
-        self.assertIn("Verdict:", text)
-        self.assertIn("CEO move:", text)
+        text = html_text(at)
+        self.assertIn("Sharpest Needle · F-003", text)
+        self.assertIn("Illustrative: inventory 333 built up.", text)  # the needle's claim
+        self.assertIn("estimated impact on earnings per share", text)  # F-003-a eps_pct -2.5
+        self.assertIn("Illustrative: rebate provisions of 222", text)  # Synthesizer verdict
+        self.assertIn("CEO decision · next two quarters", text)
+        self.assertIn("Illustrative: cut channel inventory of 333", text)
+        self.assertEqual(at.get("download_button")[0].proto.label,
+                         "⬇ Download the CEO report (PDF)")
 
     def submit(self, at):
         with mock.patch.object(app, "launch") as launch:
