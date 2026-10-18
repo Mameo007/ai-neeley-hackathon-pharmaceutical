@@ -305,7 +305,7 @@ class ResultTests(AppTestCase):
         self.assertIn("No CEO move: CEO Move has not run", warnings)
         (run_dir / "findings.json").write_text("{not json", encoding="utf-8")
         at = PageTests.page(self, "NVO-20261018-0100")
-        self.assertIn("could not read this run's files", at.error[0].value)
+        self.assertIn("result files couldn't be read", at.error[0].value)
         self.assertEqual(at.expander[-1].label, "Details")  # diagnostics still shown
 
     def test_result_model_without_selected_findings(self):
@@ -328,6 +328,162 @@ class ResultTests(AppTestCase):
         self.assertIn("“$1.2 &lt;b&gt;bn&lt;/b&gt;<br>next”", out)
         self.assertIn("src &amp; co", out)
         self.assertNotIn("\\", out)
+
+
+class FriendlyErrorTests(AppTestCase):
+    def test_usage_errors_in_plain_words(self):
+        cases = {"runs/NVO-1 already exists; start again in a minute": "less than a minute ago",
+                 "this run is already being processed": "already working",
+                 "--needle F-9 is not a selected finding; choose one of F-1": "Pick another one",
+                 "--corpus x must hold manifest.json": "Retry without them",
+                 "something new": "could not be started"}
+        for message, expected in cases.items():
+            self.assertIn(expected, app.usage_error_text(message))
+            self.assertNotIn("--", app.usage_error_text(message))
+
+    def test_recovery_picks_one_button(self):
+        run_dir = self.make_run("NVO-20261018-0100", "failed", "x", stages={})
+        failed = {"status": "failed", "error": "boom"}
+        cases = [("done", START_DONE, None),
+                 ("failed", dict(START_DONE, synthesizer=failed), "finish"),
+                 ("failed", {"corpus": failed}, "start_prebuilt"),
+                 ("failed", {"corpus": {"status": "ok"}, "dedup": failed}, "start"),
+                 ("awaiting_human", START_DONE, None)]
+        (run_dir / "report.pdf").write_bytes(b"%PDF")
+        for phase, stages, action in cases:
+            fix = app.recovery(phase, {"stages": stages}, run_dir, "NVO")
+            self.assertEqual(fix and fix["action"], action, (phase, stages))
+        (run_dir / "report.pdf").unlink()
+        self.assertEqual(app.recovery("done", {"stages": START_DONE}, run_dir, "NVO")["label"],
+                         "Retry the report")
+        amgn = app.recovery("failed", {"stages": {"corpus": failed}}, run_dir, "AMGN")
+        self.assertEqual((amgn["label"], amgn["action"]), ("Retry", "start"))
+        self.assertIn("Amgen's filings", amgn["text"])
+
+    def page(self, run=None):
+        return PageTests.page(self, run)
+
+    def test_failed_sec_fetch_offers_prebuilt_filings(self):
+        self.make_run("NVO-20261018-0100", "failed", "x",
+                      stages={"corpus": {"status": "failed", "seconds": 1, "error": "HTTP 503"}})
+        at = self.page("NVO-20261018-0100")
+        self.assertEqual(at.error[0].value, "Couldn't collect Novo Nordisk's filings from SEC.")
+        with mock.patch.object(orchestrator, "prepare_run",
+                               return_value=self.runs / "NVO-X") as prepare, \
+                mock.patch.object(app, "launch"):
+            at.button(key="recover").click().run()
+        self.assertEqual(prepare.call_args.kwargs["corpus"], REPO_ROOT / "data" / "sample" / "NVO")
+
+    def test_failed_report_step_retries_with_the_same_pick(self):
+        run_dir = self.make_run("NVO-20261018-0100", "failed", "x", stages=dict(
+            START_DONE, synthesizer={"status": "failed", "seconds": 1, "error": "TypeError: x"}))
+        at = self.page("NVO-20261018-0100")
+        self.assertIn("Retry with the same pick, or change it below", at.error[0].value)
+        self.assertNotIn("TypeError", at.error[0].value)
+        with mock.patch.object(app, "launch") as launch:
+            at.button(key="recover").click().run()
+        self.assertFalse(at.exception)
+        self.assertEqual(launch.call_args.args[0], run_dir)
+        self.assertEqual(orchestrator.read_status(run_dir)["phase"], "running")
+        self.assertEqual(json.loads((run_dir / "run.json").read_text())["sharpest_needle"],
+                         "F-003")
+
+    def test_crash_detail_moves_to_details(self):
+        run_dir = self.make_run("NVO-20261018-0100", "failed", "x",
+                                stages={"dedup": {"status": "failed", "seconds": 0, "error": "x"}})
+        status = orchestrator.read_status(run_dir)
+        status["error"] = "OSError: disk full"
+        orchestrator._save(run_dir, status)
+        at = self.page("NVO-20261018-0100")
+        self.assertNotIn("OSError", " ".join(e.value for e in at.error))
+        self.assertIn("Background job error: OSError: disk full",
+                      " ".join(c.value for c in at.caption))
+
+    def test_refused_start_shows_plain_text_and_retry(self):
+        at = self.page()
+        refusal = orchestrator.UsageError("unknown ticker 'NVO'")
+        with mock.patch.object(orchestrator, "prepare_run", side_effect=refusal), \
+                mock.patch.object(app, "launch") as launch:
+            next(b for b in at.button if b.label.startswith("Find the needle")).click().run()
+            self.assertEqual(at.error[0].value, "That request could not be started. Try again.")
+            at.button(key="retry-start").click().run()
+            self.assertEqual(len(at.error), 1)  # still refused, Retry still offered
+        launch.assert_not_called()
+        with mock.patch.object(orchestrator, "prepare_run",
+                               return_value=self.runs / "NVO-X") as prepare, \
+                mock.patch.object(app, "launch"):
+            at.button(key="retry-start").click().run()
+        prepare.assert_called_once()
+
+    def test_same_minute_clash_opens_the_existing_run(self):
+        self.make_run("NVO-20261018-0100", "running", "x")
+        at = self.page()
+        clash = orchestrator.UsageError(f"{self.runs / 'NVO-20261018-0100'} already exists; "
+                                        "start again in a minute")
+        with mock.patch.object(orchestrator, "prepare_run", side_effect=clash):
+            next(b for b in at.button if b.label.startswith("Find the needle")).click().run()
+        self.assertIn("less than a minute ago", at.error[0].value)
+        self.assertEqual(len([b for b in at.button if b.key == "retry-start"]), 0)
+        at.button(key="open-existing").click().run()
+        self.assertEqual(at.selectbox(key="run").value, "NVO-20261018-0100")
+
+    def test_stale_refusal_is_dropped_for_another_company(self):
+        at = self.page()
+        with mock.patch.object(orchestrator, "prepare_run",
+                               side_effect=orchestrator.UsageError("boom")):
+            next(b for b in at.button if b.label.startswith("Find the needle")).click().run()
+        self.assertEqual(len(at.error), 1)
+        at.button(key="pick-AMGN").click().run()
+        self.assertEqual(len(at.error), 0)
+        self.assertNotIn("start_error", at.session_state)
+
+    def test_real_orchestrator_refusals_map_to_plain_text(self):
+        run_dir = orchestrator.prepare_run("NVO")
+        with self.assertRaises(orchestrator.UsageError) as clash:
+            orchestrator.prepare_run("NVO")
+        self.assertIn("less than a minute ago", app.usage_error_text(str(clash.exception)))
+        with self.assertRaises(orchestrator.UsageError) as early:
+            orchestrator.prepare_finish(run_dir)
+        self.assertIn("already working", app.usage_error_text(str(early.exception)))
+        status = orchestrator.read_status(run_dir)
+        status["phase"] = "failed"
+        orchestrator._save(run_dir, status)
+        with self.assertRaises(orchestrator.UsageError) as unscored:
+            orchestrator.prepare_finish(run_dir)
+        self.assertIn("never finished reading", app.usage_error_text(str(unscored.exception)))
+
+    def test_prebuilt_run_retries_with_prebuilt_filings(self):
+        run_dir = self.make_run("NVO-20261018-0100", "failed", "x",
+                                stages={"dedup": {"status": "failed", "seconds": 0, "error": "x"}})
+        shutil.copy(REPO_ROOT / "data" / "sample" / "NVO" / "manifest.json",
+                    run_dir / "manifest.json")
+        fix = app.recovery("failed", orchestrator.read_status(run_dir), run_dir, "NVO")
+        self.assertEqual((fix["label"], fix["action"]), ("Retry", "start_prebuilt"))
+        self.assertFalse(app.used_prebuilt(run_dir, "AMGN"))
+
+    def test_done_run_without_pdf_offers_the_report_retry(self):
+        run_dir = self.make_run("NVO-20261018-0100", "done", "x", done=True)
+        (run_dir / "report.pdf").unlink()
+        at = self.page("NVO-20261018-0100")
+        self.assertFalse(at.exception)
+        self.assertEqual(at.button(key="recover").label, "Retry the report")
+        self.assertIn("Sharpest Needle · F-003", html_text(at))  # result still shown
+
+    def test_recover_refused_shows_plain_text(self):
+        self.make_run("NVO-20261018-0100", "failed", "x",
+                      stages={"dedup": {"status": "failed", "seconds": 0, "error": "x"}})
+        at = self.page("NVO-20261018-0100")
+        with mock.patch.object(orchestrator, "prepare_run",
+                               side_effect=orchestrator.UsageError("boom")):
+            at.button(key="recover").click().run()
+        self.assertFalse(at.exception)
+        self.assertIn("That request could not be started", at.error[-1].value)
+
+    def test_interrupted_run_shows_one_box(self):
+        self.make_run("NVO-20261018-0100", "running", "x")
+        at = self.page("NVO-20261018-0100")
+        self.assertEqual(len(at.error), 1)
+        self.assertEqual(len([b for b in at.button if b.key == "recover"]), 0)
 
 
 class CompanyTileTests(unittest.TestCase):
@@ -506,7 +662,8 @@ class PageTests(AppTestCase):
         with mock.patch.object(app, "live_runs", return_value=frozenset({str(run_dir)})):
             launch = self.submit(at)
         launch.assert_not_called()
-        self.assertIn("already being processed", at.error[0].value)
+        self.assertEqual(at.error[0].value,
+                         "This run is already working. Wait for it to finish, then try again.")
 
     def test_start_uses_prebuilt_only_when_toggled(self):
         for toggled, expected in ((False, None), (True, REPO_ROOT / "data" / "sample" / "NVO")):
@@ -536,8 +693,8 @@ class PageTests(AppTestCase):
         at = self.page("NVO-20261018-0100")
         self.assertFalse(at.exception)
         self.assertEqual(len(at.radio), 0)
-        self.assertIn("no job for it is alive", at.error[0].value)
-        next(b for b in at.button if b.label.startswith("Mark it as failed")).click().run()
+        self.assertIn("stopped when the app restarted", at.error[0].value)
+        next(b for b in at.button if b.label == "Mark as failed").click().run()
         self.assertEqual(orchestrator.read_status(self.runs / "NVO-20261018-0100")["phase"],
                          "failed")
         self.assertEqual(at.radio[0].value, "F-003")  # the pick form is back

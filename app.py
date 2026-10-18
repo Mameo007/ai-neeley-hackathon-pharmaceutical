@@ -534,6 +534,60 @@ def why_line(r):
     return f"{impact[0].upper()}{impact[1:]}; {news}."
 
 
+def usage_error_text(message):
+    """A refused start/finish request (orchestrator.UsageError) in one plain sentence."""
+    if "already exists" in message:
+        return "A run for this company started less than a minute ago. Try again in a minute."
+    if "already being processed" in message or "phase 'running'" in message:
+        return "This run is already working. Wait for it to finish, then try again."
+    if "not a selected finding" in message:
+        return "That finding is no longer on the shortlist. Pick another one."
+    if "--corpus" in message:
+        return "The prebuilt filings for this company are incomplete. Retry without them."
+    if "no scored findings.json" in message or "reached the human pause" in message:
+        return ("This run never finished reading the filings, so it has no report to write. "
+                "Start the company again.")
+    return "That request could not be started. Try again."
+
+
+def used_prebuilt(run_dir, ticker):
+    """Whether this run's corpus is a copy of the prebuilt one (the orchestrator copies the
+    files as they are, so the manifests are byte-identical)."""
+    prebuilt = prebuilt_corpus(ticker) if ticker else None
+    mine = Path(run_dir) / "manifest.json"
+    return (prebuilt is not None and mine.is_file()
+            and mine.read_bytes() == (prebuilt / "manifest.json").read_bytes())
+
+
+def recovery(phase, status, run_dir, ticker):
+    """What went wrong with a run and the one button that recovers it:
+    {"text", "label", "action"} with action "start" / "start_prebuilt" / "finish", or None."""
+    stages = status.get("stages", {})
+    company = librarian.CIKS.get(ticker, (None, ticker or "this company"))[1]
+    start_done = (stages.get("scoring_after_peer") or {}).get("status") == "ok"
+    finish = {"label": "Retry the report", "action": "finish"}
+    if phase == "done":
+        if (Path(run_dir) / "report.pdf").is_file():
+            return None
+        return {"text": "The report step finished without writing the PDF.", **finish}
+    if phase != "failed":
+        return None
+    if start_done:
+        return {"text": "The report step stopped before it finished. Retry with the same pick, "
+                        "or change it below.", **finish}
+    if used_prebuilt(run_dir, ticker):  # keep the offline choice: never switch to live SEC
+        return {"text": f"The agents stopped before they finished reading {company}'s filings.",
+                "label": "Retry", "action": "start_prebuilt"}
+    if (stages.get("corpus") or {}).get("status") == "failed":
+        if ticker and prebuilt_corpus(ticker) is not None:
+            return {"text": f"Couldn't collect {company}'s filings from SEC.",
+                    "label": "Use prebuilt filings", "action": "start_prebuilt"}
+        return {"text": f"Couldn't collect {company}'s filings from SEC. Check the connection, "
+                        "then retry.", "label": "Retry", "action": "start"}
+    return {"text": f"The agents stopped before they finished reading {company}'s filings.",
+            "label": "Retry", "action": "start"}
+
+
 def stage_problems(status):
     """Stages that did not simply succeed, for the warning above the stage table."""
     return [(name, e.get("status"), e.get("error")) for name, e in status.get("stages", {}).items()
@@ -638,15 +692,69 @@ def new_run_form():
                                       "them from SEC. Works offline.")
     clicked = st.button(f"Find the needle in {name} →", type="primary")
     st.caption("Takes a few minutes. You pick the final finding.")
+    corpus = corpus if use_prebuilt else None
     if clicked:
-        corpus = corpus if use_prebuilt else None
+        start_run(ticker, corpus)
+    error = st.session_state.get("start_error")
+    if error and error["ticker"] != ticker:
+        st.session_state.pop("start_error")  # another company picked: the old refusal is moot
+    elif error:
+        st.error(error["text"])
+        if error["existing"]:  # the same company started this minute: open it, don't retry
+            if st.button("Open that run", key="open-existing"):
+                st.session_state.pop("start_error")
+                _open(error["existing"])
+        elif st.button("Retry", key="retry-start"):
+            start_run(ticker, corpus)
+
+
+def start_run(ticker, corpus=None):
+    """Start a run in the background and open it; a refusal is kept for the Retry button."""
+    with _launch_lock():
         try:
             run_dir = orchestrator.prepare_run(ticker, corpus=corpus)
         except orchestrator.UsageError as exc:
-            st.error(str(exc))
+            logging.getLogger("app").warning("start refused: %s", exc)
+            existing = re.match(r"(\S+) already exists", str(exc))
+            st.session_state["start_error"] = {
+                "ticker": ticker, "text": usage_error_text(str(exc)),
+                "existing": Path(existing.group(1)).name if existing else None}
             return
+        st.session_state.pop("start_error", None)
         launch(run_dir, lambda: orchestrator.run_start_stages(run_dir, corpus))
-        _open(run_dir.name)
+    _open(run_dir.name)
+
+
+def finish_again(run_dir):
+    """Re-run the report step with the pick already in run.json."""
+    with _launch_lock():
+        try:
+            if str(run_dir) in live_runs():
+                raise orchestrator.UsageError("this run is already being processed")
+            orchestrator.prepare_finish(run_dir)
+        except orchestrator.UsageError as exc:
+            logging.getLogger("app").warning("report retry refused: %s", exc)
+            st.error(usage_error_text(str(exc)))
+            return
+        launch(run_dir, lambda: orchestrator.run_finish_stages(run_dir))
+    _open(Path(run_dir).name)
+
+
+def recovery_box(run, status):
+    """The plain-English error and its one recovery button, for a failed or incomplete run."""
+    fix = recovery(run["phase"], status, run["path"], run["ticker"])
+    if fix is None:
+        return
+    st.error(fix["text"])
+    if st.button(fix["label"], type="primary", key="recover"):
+        if fix["action"] == "finish":
+            finish_again(run["path"])
+        else:
+            start_run(run["ticker"],
+                      prebuilt_corpus(run["ticker"]) if fix["action"] == "start_prebuilt" else None)
+            refused = st.session_state.pop("start_error", None)  # set only if refused
+            if refused:
+                st.error(refused["text"])
 
 
 def stage_warning(status):
@@ -762,7 +870,8 @@ def review_section(run_dir, ticker):
                     orchestrator.prepare_finish(  # "" clears an earlier product choice
                         run_dir, needle=needle, product="" if product == NOT_CONFIRMED else product)
                 except orchestrator.UsageError as exc:
-                    st.error(str(exc))
+                    logging.getLogger("app").warning("finish refused: %s", exc)
+                    st.error(usage_error_text(str(exc)))  # the form's button is the retry
                     return
                 launch(run_dir, lambda: orchestrator.run_finish_stages(run_dir))
             _open(Path(run_dir).name)
@@ -806,8 +915,8 @@ def results_section(run_dir, ticker):
     except (OSError, ValueError, KeyError, TypeError, AttributeError) as exc:
         # A broken findings.json must not hide the stage diagnostics below, or the PDF.
         logging.getLogger("app").exception("result screen for %s", run_dir)
-        st.error(f"The result screen could not read this run's files ({type(exc).__name__}). "
-                 "The report and the agents' details are below.")
+        st.error("This run's result files couldn't be read. The PDF report and the agents' "
+                 "details are below.")
         _pdf_button(run_dir)
         return
     company = librarian.CIKS.get(ticker, (None, ticker or ""))[1]
@@ -861,11 +970,11 @@ def _pdf_button(run_dir):
         st.download_button("⬇ Download the CEO report (PDF)", pdf.read_bytes(),
                            file_name=f"pharmer-{Path(run_dir).name}.pdf",
                            mime="application/pdf", type="primary", use_container_width=True)
-    else:
-        st.error("No report.pdf for this run (see the stage table).")
+    # No PDF: recovery_box at the top of the run offers "Retry the report".
 
 
 def show_run(run):
+    st.session_state.pop("start_error", None)  # a refusal on the new-run form is moot here
     run_dir = run["path"]
     status = orchestrator.read_status(run_dir)
     if st.button("➕ New run"):  # the picker is tucked away in "Past runs"; keep the way back visible
@@ -876,13 +985,12 @@ def show_run(run):
         show_progress(run_dir)
         return
     if run["phase"] == "interrupted":
-        st.error("This run is marked running, but no job for it is alive in this app (the app "
-                 "was restarted mid-run, or it is running from the command line).")
-        if st.button("Mark it as failed so it can be retried"):
+        st.error("This run stopped when the app restarted (or it is running from the command "
+                 "line). Mark it as failed to retry it.")
+        if st.button("Mark as failed", type="primary"):
             mark_interrupted(run_dir)
             st.rerun()
-    if status.get("error"):
-        st.error(f"The background job crashed: {status['error']}")
+    recovery_box(run, status)
     if run["phase"] == "done":
         results_section(run_dir, run["ticker"])
     stage_warning(status)
@@ -890,6 +998,8 @@ def show_run(run):
     with st.expander("The agents", expanded=trouble):
         agents_section(run_dir, status, live=False)
     with st.expander("Details", expanded=trouble):
+        if status.get("error"):
+            st.caption(f"Background job error: {status['error']}")
         stage_table(status)
     start_done = (status.get("stages", {}).get("scoring_after_peer") or {}).get("status") == "ok"
     if start_done and run["phase"] != "interrupted":
