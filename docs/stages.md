@@ -1,10 +1,27 @@
-# Agents: what each one does, as built
+# Pipeline stages: what each one does, as built
 
-`docs/architecture.md` is the design target. This file describes what each agent
-**actually does in the code on `main`** (checked 2026-10-19): what it reads, what
-it writes, which model it uses, how it works and what part of the design it
-does not do yet. File names refer to `runs/<run_id>/`; shapes are in
-`docs/contracts.md`.
+`docs/architecture.md` is the design target. This file describes what each
+pipeline stage **actually does in the code on `main`** (checked 2026-10-19):
+what it reads, what it writes, which model it uses, how it works and what part
+of the design it does not do yet. File names refer to `runs/<run_id>/`; shapes
+are in `docs/contracts.md`.
+
+## Terms
+
+- **Agent** means a **hunter**, and only a hunter. A hunter is an Opus tool loop
+  (`llm.run_agent()`): it decides which chunks to search and read, over up to 15
+  turns, and when to submit leads. The hunters are the only agents in the code.
+- **Stage** means any step of the pipeline (`pipeline.json` records one entry
+  per stage). Every stage other than the hunters is a Python module that does
+  one of two things:
+  - runs code only (Librarian, Scoring, Exec Report), or
+  - runs code around fixed, single Claude calls (`llm.call()`) with no tools
+    and no loop: a judge (Dedup, Fact Checker), a formula choice (Quant) or one
+    piece of writing (Comparison Builder, Synthesizer, CEO Move). Code decides
+    what goes into each call and checks what comes back.
+- `docs/architecture.md` uses the older wording ("Quant agent", "CEO Move
+  agent", "Peer Agent"), and the UI labels its stage cards "agent cards". Read
+  those as stage names; they are not agents in the sense above.
 
 ## The run in one picture
 
@@ -32,22 +49,22 @@ next one starts (no per-candidate pipelining yet). `pipeline.json` records every
 stage's status (`ok`, `degraded`, `skipped`, `disabled`, `failed`) and timing,
 and the UI polls it.
 
-| Agent | Module | Model | Required? |
-|---|---|---|---|
-| Orchestrator | `orchestrator.py` | none | n/a |
-| Librarian | `pharmer/librarian.py` | none (code) | yes |
-| 6 hunters | `pharmer/hunters/` | Opus | yes |
-| Dedup / merge | `pharmer/dedup.py` | Haiku (judge) | yes |
-| Fact Checker | `pharmer/fact_checker.py` | Haiku (claim-support judge) | no |
-| Quant | `pharmer/quant.py` | Haiku (formula choice) | no |
-| Priced-In Detector | not built | n/a | disabled |
-| Scoring / selection | `pharmer/scoring.py` | none (code) | yes |
-| Peer Agent | not built | n/a | disabled |
-| Comparison Builder | `pharmer/comparison.py` | Opus | no |
-| Synthesizer | `pharmer/synthesizer.py` | Opus | yes |
-| CEO Move | `pharmer/ceo_move.py` | Opus | yes |
-| Exec Report | `pharmer/report.py` | none (code) | yes |
-| UI | `app.py` (Streamlit) | none | n/a |
+| Stage | Module | Kind | Model | Required? |
+|---|---|---|---|---|
+| Orchestrator | `orchestrator.py` | runner, not a stage | none | n/a |
+| Librarian | `pharmer/librarian.py` | code | none | yes |
+| 6 hunters | `pharmer/hunters/` | **agents** (tool loop) | Opus | yes |
+| Dedup / merge | `pharmer/dedup.py` | code + one judge call per shared anchor | Haiku | yes |
+| Fact Checker | `pharmer/fact_checker.py` | code + one judge call per reasoning | Haiku | no |
+| Quant | `pharmer/quant.py` | code + one formula call per reasoning | Haiku | no |
+| Priced-In Detector | not built | n/a | n/a | disabled |
+| Scoring / selection | `pharmer/scoring.py` | code | none | yes |
+| Peer Agent | not built | n/a | n/a | disabled |
+| Comparison Builder | `pharmer/comparison.py` | code + one call per product column | Opus | no |
+| Synthesizer | `pharmer/synthesizer.py` | code + one call | Opus | yes |
+| CEO Move | `pharmer/ceo_move.py` | code + one call | Opus | yes |
+| Exec Report | `pharmer/report.py` | code | none | yes |
+| UI | `app.py` (Streamlit) | front end, not a stage | none | n/a |
 
 "Required" means that if the stage fails, the phase stops. When an optional stage
 fails, the run is marked and goes on. Every Claude call goes through
@@ -74,7 +91,8 @@ fails, the run is marked and goes on. Every Claude call goes through
 
 ## Librarian (`pharmer/librarian.py`): stage 0
 
-**Job:** builds the closed-book corpus that every other agent cites.
+**Job:** builds the closed-book corpus that the hunters and every later stage
+cite.
 
 - **Reads:** SEC EDGAR, live: the submissions list, filing documents and XBRL
   `companyfacts`. It supports all 10 shortlist tickers (`CIKS`). The SEC user
@@ -105,6 +123,9 @@ fails, the run is marked and goes on. Every Claude call goes through
   for the number tie.
 
 ## Hunter swarm (`pharmer/hunters/`): stage 1
+
+The hunters are the project's agents: each one chooses its own searches and
+reads and decides when it has enough to submit.
 
 **Shared harness (`harness.py`):** every hunter runs the same Opus tool loop,
 with a byte-identical system prompt (`prompts/hunter_rules.md`) and the same
@@ -338,8 +359,8 @@ market has priced it in.
 A Streamlit app, deployed on Render (`render.yaml`):
 
 - **Company grid:** the 10 shortlist tiles with the case's starter threads.
-- **Agent cards:** one card per stage, filled from `pipeline.json`. Disabled
-  stages are hidden.
+- **Stage cards** (labelled "agent cards" in the code): one card per stage,
+  filled from `pipeline.json`. Disabled stages are hidden.
 - **Review screen:** the selected findings and the analyst's pick (needle and
   product).
 - **Result screen:** the needle headline, the impact number (never computed by
