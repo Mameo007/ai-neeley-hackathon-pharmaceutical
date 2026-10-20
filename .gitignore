@@ -12,3 +12,6 @@ logs/
 
 # Raw SEC downloads behind the sample corpus (regenerate with scripts/build_sample_corpus.py)
 data/sample/*/_raw/
+
+# macOS folder metadata (lists local folder and file names)
+.DS_Store
