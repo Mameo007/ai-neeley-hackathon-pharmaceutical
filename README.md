@@ -129,22 +129,12 @@ shows as *degraded*, with the reason.
 `start` stops at the human pause and prints the exact `finish` command. Each run's files,
 including `report.pdf` and `pipeline.json` (stage status and timings), are in `runs/<run_id>/`.
 
-## Deploy on Render
+## Deploy
 
-Create a Render Blueprint from this repository and select the branch containing
-`render.yaml`. It configures a Free web service with no paid disk or database.
-Enter `ANTHROPIC_API_KEY` and `PHARMER_SEC_UA` when prompted; keep secrets out of
-Git. Anthropic API usage is billed separately from hosting.
-
-Free services sleep after 15 minutes without inbound traffic and can take about
-a minute to wake up. Runs, PDFs, and API logs are temporary: they are lost on
-sleep, restart, or redeploy. Download reports before leaving the demo. Existing
-local runs are not uploaded, and in-flight jobs stop when the service restarts.
-Render includes 750 free instance hours per workspace per month. To avoid paid
-overages, use a workspace without a payment method; usage limits then suspend
-services or builds instead of billing. See https://render.com/docs/free.
-
-The health endpoint is `/_stcore/health`. Local startup remains unchanged.
+`render.yaml` deploys the app to Render's free tier: create a Blueprint from this repo and
+enter `ANTHROPIC_API_KEY` and `PHARMER_SEC_UA` when prompted. Storage on the free tier is
+temporary, so runs and PDFs are lost when the service sleeps or restarts. Download reports
+before leaving.
 
 ## Tests
 
