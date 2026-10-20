@@ -1,7 +1,13 @@
 # Architecture: AI Agent Team for Pharma Analyst Work
 
-> **Status: design only — nothing implemented yet.**
-> This document is derived entirely from two brainstorming session logs:
+> **Status: design target, partly built.** The pipeline runs end to end on
+> `main` (checked against the code 2026-10-19), but several parts of this
+> design are deferred or simplified. **§9.6 lists every difference between
+> this design and the code**, and **`docs/agents.md` describes what each agent
+> actually does** (inputs, outputs, model, checks). When this document and the
+> code disagree, §9.6 says which one is current.
+>
+> This document was first derived from two brainstorming session logs:
 > - `_bmad-output/brainstorming/brainstorm-ai-agent-pharma-analyst-team-2026-10-17/.memlog.md`
 >   (pipeline design)
 > - `_bmad-output/brainstorming/brainstorm-architecture-open-questions-2026-10-17/.memlog.md`
@@ -10,8 +16,7 @@
 >   in `source-probe/` next to that log)
 >
 > It describes the agreed architecture for the Neeley AI Forward Advanced Track
-> submission. No code, prompts, or infrastructure exist yet — this is the spec
-> to build against.
+> submission, the spec the code was built against.
 
 ---
 
@@ -106,7 +111,7 @@ flowchart TD
         C5["DailyMed labels<br/>(labeler-code filtered)"]
         C6["Orange/Purple Book<br/><i>deferred, §9.5</i>"]
         C7[XBRL structured data]
-        C8[IR Excel financial workbooks]
+        C8["IR Excel financial workbooks<br/><i>deferred, §9.5</i>"]
     end
     B --> Corpus
 
@@ -131,7 +136,7 @@ flowchart TD
     AISEL --> HUMAN["Human<br/>sees the 5, NAMES Sharpest Needle<br/>(accept Recommended or pick another of the 5)"]
 
     HUMAN --> PROD["Product selection<br/>hybrid dropdown:<br/>AI pre-selects from strongest findings,<br/>user confirms/overrides"]
-    PROD --> LL2["Label Lawyer (product-specific pass)<br/>+ rival filings/labels fetch"]
+    PROD --> LL2["Label Lawyer (product-specific pass)<br/>+ rival filings/labels fetch<br/><i>deferred, §9.5</i>"]
     LL2 --> CB["Comparison Builder<br/>5-dimension grid vs named rivals,<br/>cell-level citations, 'not disclosed' if unsourced"]
 
     HUMAN --> SYN["Synthesizer<br/>reads 5 findings + comparison grid,<br/>writes growth-limiter / priced-in verdict sentence"]
@@ -146,8 +151,12 @@ flowchart TD
     REPORT --> OUT[Download / Email]
 
     classDef deferred stroke-dasharray: 5 5,fill:#eeeeee,color:#777777
-    class C3,C4,C6,H6,H8,G,PEER deferred
+    class C3,C4,C6,C8,H6,H8,G,PEER,LL2 deferred
 ```
+
+In the code, DailyMed labels (C5) exist only in the prebuilt NVO corpus
+(`data/sample/NVO`); a live Librarian run fetches SEC filings and XBRL only
+(§9.6).
 
 ### 3.3 Hunter-swarm fan-out / fan-in
 
@@ -180,7 +189,7 @@ flowchart LR
 
 Because the demo is live, run time is a design constraint.
 
-- **Pipelining (decided):** stages do not run as batches. Each candidate
+- **Pipelining (decided, not built — §9.6):** stages do not run as batches. Each candidate
   flows into Fact Checker → Quant → Priced-In Detector **as soon as it
   emerges** from Dedup, so verification overlaps with hunting.
   One barrier is unavoidable: scoring and the Peer Agent need the **full**
@@ -188,7 +197,8 @@ Because the demo is live, run time is a design constraint.
 - **Model tiering (decided):** a faster, cheaper model for the mechanical
   stages (Dedup judge, Fact Checker, Quant formula selection); the strongest
   model for the hunters, Synthesizer, and CEO Move agent.
-- **Estimated budget (reasoned, not measured — nothing is built):**
+- **Estimated budget (reasoned before the build; not yet replaced by measured
+  timings — `pipeline.json` records real per-stage seconds per run):**
 
 | Stage | Estimate (stage-by-stage design) | What drives it |
 |---|---|---|
@@ -212,6 +222,10 @@ Because the demo is live, run time is a design constraint.
 ---
 
 ## 4. Agent Roster
+
+This section is the design of each agent. For what each agent does in the
+code today (files read and written, model, validation, gaps), see
+`docs/agents.md`.
 
 ### 4.0 Librarian
 
@@ -746,7 +760,9 @@ several, each caught by checking against the primary source:
 2. **Real run time** — §3.4 is an estimate until Stage-2 runs.
 3. **Concept-map coverage** — whether ~20–30 metrics suffice is validated
    by the miss log during testing.
-4. **Hunter turn cap** — exact value set during build.
+4. ~~**Hunter turn cap** — exact value set during build.~~ Resolved: 15
+   turns (`MAX_TURNS` in `pharmer/hunters/harness.py`, also stated in
+   `prompts/hunter_rules.md`).
 5. **Labeler allowlist completeness** — verify Wezlana's labeler (only
    Nuvaila found) and any other private-label cases by hand.
 6. **Pre-bundle refresh** — re-collect transcripts and rival annual reports
@@ -758,9 +774,11 @@ several, each caught by checking against the primary source:
 ### 9.5 Deferred for the hackathon deadline (decided 2026-10-18)
 
 Cut to ship on time; the design above stays the target. In the diagrams
-(§3.2, §3.3, §5.3) deferred parts are dashed grey boxes marked "deferred, §9.5". Each cut stage is
-skipped visibly by the orchestrator ("skipped: not built"), and the
-fallbacks below are already in code.
+(§3.2, §3.3, §5.3) deferred parts are dashed grey boxes marked "deferred, §9.5". The
+Priced-In Detector and Peer Agent are listed in `orchestrator.DISABLED_STAGES`:
+they are never scheduled and `pipeline.json` records them as `disabled` with a
+reason (any other missing stage module is recorded as "skipped: not built").
+The fallbacks below are already in code.
 
 | Deferred | Why it can wait | What runs instead |
 |---|---|---|
@@ -773,7 +791,37 @@ fallbacks below are already in code.
 
 **Not deferred (ship path):** Label Lawyer hunter (the final 5 must hold a
 label/product finding, §5.1 label guarantee), the Synthesizer's crash with
-no API credential, Quant (Partner A), then one real end-to-end run.
+no API credential, Quant (Partner A), then one real end-to-end run. All four
+are done (build log, 2026-10-18).
+
+### 9.6 Where the code differs from this design (checked 2026-10-19)
+
+This section lists every difference between the design above and the code on
+`main`, including the §9.5 cuts and gaps that §9.5 does not record. Where this
+section and the text above disagree, this section describes the code.
+`docs/agents.md` has the per-agent detail.
+
+| Design (section) | Code on `main` |
+|---|---|
+| 8 hunters (§3.1, §4.1) | 6 hunters: Channel Checker, Redliner, Table Archaeologist, Footnote Miner, Gross-to-Net Tracker, Label Lawyer. Call Decoder and Peer Contraster are not built. |
+| Pipelining: each candidate flows on as soon as Dedup emits it (§3.4) | Not built. Stages run in order, and each one processes every finding before the next starts. |
+| Librarian fetches labels, Orange/Purple Book, transcripts, rival filings and IR workbooks (§4.0) | A live run fetches SEC filings (10-K/10-Q or 20-F/6-K, prior-year quarter, incorporated exhibits) and XBRL only. DailyMed labels (Ozempic, Mounjaro) exist only in the prebuilt `data/sample/NVO` corpus, built by `scripts/build_sample_corpus.py` with the §4.0 label rule. `start --corpus` uses that corpus. |
+| Manifest shown as a "what we read" panel (§4.0) | No panel in the UI. The PDF lists its sources, and the agent card shows a document count. |
+| IR workbook as the second number-tie source (§2, §4.3) | Not built. A foreign filer's quarterly figure has no second source, so it reaches Medium at most, and Quant cannot compute its `eps_pct`, so it scores null. |
+| Dedup "split option" (§4.2) | Not built. A composite row stays composite. |
+| Quant shows native + converted amounts with the FX rate and date (§4.4) | Quant stores `usd_m`, `eps_pct`, `formula`, `inputs` and `fx`. The report prints only `usd_m` and `eps_pct`. The native amount is not in Contract 2. |
+| Scoring takes the top ~10 for the Peer Agent (§5.1.3) | No top-10 cut, because the Peer Agent is disabled. Peer null means no demotion. A reasoning with no Quant impact scores null and ranks after every scored one. |
+| One targeted Label Lawyer retry when no label finding exists (§5.1.4) | Not built. Scoring logs it, and the report prints the "no label/product finding" warning. |
+| Product dropdown pre-selected by the AI (§6) | Not built. The dropdown lists the appendix products (`data/products.json`) and starts at "Not confirmed". Rivals can be set from the CLI only (`finish --rivals`); the UI shows the appendix rivals as text. |
+| Label Lawyer product-specific pass + rival fetch after the pick (§6, stage 10) | Not built. Only the company-wide Label Lawyer pass runs, and the Comparison Builder works from the corpus's existing labels and filings. |
+| Human picks a label when zero or several match (§4.0) | This happens when the sample corpus is built: the script stops instead of auto-picking. There is no run-time pause, because live runs fetch no labels. |
+| Human must name the Sharpest Needle (§2, §5.1.6) | If no needle is named, CEO Move falls back to the Recommended finding and marks it `recommended_fallback`. The report says the needle was not confirmed. |
+| Priced-in verdict (§4.5, §4.8) | With no priced-in check, the report prints "Market pricing not assessed" and states that the ranking is by materiality alone. The Synthesizer's prose may still allude to pricing (known limit, build log). |
+| CEO Move output (§4.9) | As designed, plus a "why it works" field. There is no budget or rejected-alternatives field, which the case asks for. Adding them changes the output, so both partners must agree. |
+| Report structure (§4.10) | As designed, plus an Executive Overview at the top and a "Coverage and limitations" section. The CEO box is headed "24-Month Strategic Move for the CEO". |
+| Delivery: download and email (§3.1 stage 15, §4.10) | Download only (Streamlit UI). Email is not built. |
+| UI (not specified above) | A Streamlit app (`app.py`), deployed on Render (`render.yaml`). It has a company grid, agent cards from `pipeline.json`, a review screen with the pick, and a result screen. The plan is in `docs/ui-plan.md`. |
+| Run control (not specified above) | `orchestrator.py start` / `finish` split at the human pause. `pipeline.json` records each stage as `ok` / `degraded` / `skipped` / `disabled` / `failed`, with timings. Each stage writes an audit sidecar (`librarian_report.json`, `fact_check_report.json`, `quant_report.json`, `comparison_sources.json`). |
 
 ---
 
