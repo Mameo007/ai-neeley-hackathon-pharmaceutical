@@ -1,6 +1,6 @@
 # Pharmer Research
 
-> 🏆 **Winner — Neeley AI Forward: AI Innovation Competition (Advanced Track), October 2026.**
+> 🏆 **Winner — Neeley AI Forward: AI Innovation Competition (Advanced Pharmaceutical Track), October 2026.**
 > Case: *"The Fine Print: Find the Story, Then Make the Call."*
 
 **Pharmer** reads a pharmaceutical company's own SEC filings, finds five material,
