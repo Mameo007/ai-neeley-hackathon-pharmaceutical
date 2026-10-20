@@ -3,8 +3,8 @@
 > **Status: design target, partly built.** The pipeline runs end to end on
 > `main` (checked against the code 2026-10-19), but several parts of this
 > design are deferred or simplified. **§9.6 lists every difference between
-> this design and the code**, and **`docs/agents.md` describes what each agent
-> actually does** (inputs, outputs, model, checks). When this document and the
+> this design and the code**, and **`docs/stages.md` describes what each pipeline
+> stage actually does** (inputs, outputs, model, checks). When this document and the
 > code disagree, §9.6 says which one is current.
 >
 > This document was first derived from two brainstorming session logs:
@@ -223,9 +223,10 @@ Because the demo is live, run time is a design constraint.
 
 ## 4. Agent Roster
 
-This section is the design of each agent. For what each agent does in the
-code today (files read and written, model, validation, gaps), see
-`docs/agents.md`.
+This section is the design of each agent. For what each pipeline stage does
+in the code today (files read and written, model, validation, gaps), see
+`docs/stages.md`. In the code, only the hunters are agents (tool loops); the
+other stages are code with fixed single Claude calls or no call at all.
 
 ### 4.0 Librarian
 
@@ -799,7 +800,7 @@ are done (build log, 2026-10-18).
 This section lists every difference between the design above and the code on
 `main`, including the §9.5 cuts and gaps that §9.5 does not record. Where this
 section and the text above disagree, this section describes the code.
-`docs/agents.md` has the per-agent detail.
+`docs/stages.md` has the per-stage detail.
 
 | Design (section) | Code on `main` |
 |---|---|
