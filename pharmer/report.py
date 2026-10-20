@@ -30,6 +30,16 @@ CEO_FIELDS = [("action", "Action"), ("timeframe", "Timeframe"), ("trade_off", "T
 NEEDLE_HUMAN = "Named by the analyst."
 NEEDLE_FALLBACK = "AI-recommended; not yet confirmed by the analyst."
 NO_COMPARISON = "Comparison table not built for this run."
+# What the pipeline does, for a reader meeting the report cold. Describes only stages that
+# run in this pipeline; anything a particular run did not complete is named in "Coverage and
+# limitations" at the end, never implied to have happened here.
+EXEC_OVERVIEW = (
+    "Pharmer Research uses specialized AI agents to collect and analyze pharmaceutical "
+    "filings, identify five evidence-backed financial findings, and highlight the most "
+    "significant discovery. The system selects a key product, compares it with competing "
+    "treatments using available evidence, and develops a 24-month strategic recommendation "
+    "for the CEO, outlining actions, financial implications, risks, and measurable "
+    "milestones.")
 
 
 class Footnotes:
@@ -190,6 +200,17 @@ def build_model(run_dir) -> dict:
     else:
         warnings.append("No selected findings in findings.json.")
 
+    # Whether the Priced-In Detector actually looked at anything in this run, read from the
+    # findings themselves rather than from the pipeline file - a reasoning carries hits only
+    # if it was checked. Scoring's obscurity is the unchecked default for all of them when
+    # this is False, so the ranking is materiality alone and must not be described as more.
+    priced_in_assessed = any(syn.priced_in_hits(r) is not None
+                             for _f, rs in selected for r in rs)
+    if selected and not priced_in_assessed:
+        warnings.append("Market pricing not assessed: the Priced-In Detector did not run, so "
+                        "findings are ranked by materiality alone and no finding is claimed "
+                        "to be priced in or overlooked by the market.")
+
     n_selected = sum(len(rs) for _, rs in selected)
     if n_selected < FINDINGS_EXPECTED:
         warnings.append(f"Only {n_selected} of {FINDINGS_EXPECTED} findings were selected for "
@@ -200,7 +221,8 @@ def build_model(run_dir) -> dict:
 
     # Thesis: headline from the needle's own claims, then the Synthesizer's verdict.
     thesis = {"needle": needle, "needle_source": source, "headline": None,
-              "needle_note": None, "verdict": None, "priced_in": None, "notes": []}
+              "needle_note": None, "verdict": None, "priced_in": None,
+              "priced_in_assessed": priced_in_assessed, "notes": []}
     for finding, reasonings in selected:
         if finding["finding_id"] == needle:
             thesis["headline"] = (" ".join(r.get("claim") or "" for r in reasonings).strip()
@@ -216,7 +238,11 @@ def build_model(run_dir) -> dict:
                         "longer selected); verdict not shown.")
     else:
         thesis["verdict"] = synthesis["verdict"].strip()
-        thesis["priced_in"] = PRICED_IN_WORDS.get(synthesis.get("priced_in_call"))
+        # The Synthesizer is told to count an unchecked reasoning as zero hits, so with the
+        # Priced-In Detector not run it always lands on "not priced in" - a market claim
+        # nobody checked. When nothing was checked, say that instead of reporting the call.
+        thesis["priced_in"] = (PRICED_IN_WORDS.get(synthesis.get("priced_in_call"))
+                               if priced_in_assessed else None)
         thesis["notes"] = _cite_ids(synthesis["citations"], selected, notes)
 
     # Findings: needle first, then by best selected-reasoning score (unscored last).
@@ -362,10 +388,12 @@ def render_pdf(model, path, compress=True) -> None:
             f"Run {model['run_id']}"]
     story += [Paragraph(t("  |  ".join(meta)), style["meta"]), Spacer(1, 8)]
 
-    if model["warnings"]:
-        story += [boxed([Paragraph("<b>Warnings for this run</b>", style["body"])]
-                        + [Paragraph(t(w), style["body"]) for w in model["warnings"]],
-                        "#fff4d6", "#c58a00"), Spacer(1, 8)]
+    # Executive Overview: what the pipeline does, in plain prose, ahead of the thesis.
+    # The run's genuine coverage warnings are not dropped - they move to "Coverage and
+    # limitations" at the end of the report, where they stay readable without the
+    # yellow box dominating the first page.
+    story += [Paragraph("Executive Overview", style["h"]),
+              Paragraph(t(EXEC_OVERVIEW), style["body"]), Spacer(1, 8)]
 
     thesis = model["thesis"]
     story.append(Paragraph("Thesis", style["h"]))
@@ -379,6 +407,8 @@ def render_pdf(model, path, compress=True) -> None:
         line = f"{t(thesis['verdict'])} {_marks(thesis['notes'])}".strip()
         if thesis["priced_in"]:
             line += f" <b>Market view: {t(thesis['priced_in'])}.</b>"
+        elif not thesis["priced_in_assessed"]:
+            line += " <b>Market pricing not assessed.</b>"
         story.append(Paragraph(line, style["body"]))
     else:
         story.append(Paragraph("Growth-limiter verdict unavailable for this run (see "
@@ -418,7 +448,7 @@ def render_pdf(model, path, compress=True) -> None:
         story.append(Paragraph(t(comparison["note"] or NO_COMPARISON), style["body"]))
 
     callout = model["ceo_move"]
-    heading = Paragraph("Recommended CEO move", style["h"])
+    heading = Paragraph("24-Month Strategic Move for the CEO", style["h"])
     if callout["status"] == "ok":
         inner = [Paragraph(f"<b>{t(label)}:</b> {t(text)}", style["body"])
                  for label, text in callout["fields"]]
@@ -432,6 +462,14 @@ def render_pdf(model, path, compress=True) -> None:
         box = boxed([Paragraph(f"<b>CEO move unavailable.</b> {t(callout['error'])}",
                                style["body"])], "#fbeeee", "#a12a2a")
     story.append(KeepTogether([heading, box]))
+
+    if model["warnings"]:
+        story.append(Paragraph("Coverage and limitations", style["h"]))
+        for w in model["warnings"]:
+            # An en dash, not a bullet: reportlab's WinAnsi core-font encoding has no
+            # U+2022 and prints it as a DEL box.
+            story.append(Paragraph(f"\u2013 {t(w)}", style["small"]))
+        story.append(Spacer(1, 8))
 
     story.append(Paragraph("Sources", style["h"]))
     if not model["footnotes"]:

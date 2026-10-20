@@ -296,6 +296,51 @@ class FailureStateTests(ReportTestCase):
             self.model()
 
 
+class PricedInAssessmentTests(ReportTestCase):
+    """With the Priced-In Detector disabled, the report must not report a market view."""
+
+    def strip_priced_in(self):
+        def apply(findings):
+            for f in findings:
+                for r in f.get("reasonings") or []:
+                    r["priced_in"] = None
+        self.edit("findings.json", apply)
+
+    def test_an_assessed_run_still_states_the_market_view(self):
+        m = self.model()
+        self.assertTrue(m["thesis"]["priced_in_assessed"])
+        self.assertIsNotNone(m["thesis"]["priced_in"])
+        self.assertFalse(self.warned(m, "Market pricing not assessed"))
+
+    def test_an_unassessed_run_states_that_instead_of_a_call(self):
+        # The Synthesizer is told to count unchecked as zero hits, so it lands on
+        # "not priced in" - a market claim nobody checked.
+        self.strip_priced_in()
+        m = self.model()
+        self.assertFalse(m["thesis"]["priced_in_assessed"])
+        self.assertIsNone(m["thesis"]["priced_in"])
+        self.assertTrue(self.warned(m, "Market pricing not assessed"))
+        self.assertTrue(self.warned(m, "ranked by materiality alone"))
+
+    def test_the_per_finding_line_says_the_check_did_not_run(self):
+        self.strip_priced_in()
+        for row in self.model()["findings"]:
+            for r in row["reasonings"]:
+                self.assertEqual(r["priced_in"], "priced-in check not run")
+
+    def test_the_pdf_says_market_pricing_not_assessed(self):
+        self.strip_priced_in()
+        report.render_pdf(self.model(), self.run_dir / "report.pdf", compress=False)
+        data = (self.run_dir / "report.pdf").read_bytes()
+        self.assertIn(b"Market pricing not assessed", data)
+        self.assertNotIn(b"Market view:", data)
+
+    def test_an_assessed_pdf_keeps_the_market_view(self):
+        report.render_pdf(self.model(), self.run_dir / "report.pdf", compress=False)
+        data = (self.run_dir / "report.pdf").read_bytes()
+        self.assertIn(b"Market view:", data)
+
+
 class ComparisonTests(ReportTestCase):
     def test_columns_and_rows(self):
         self.write("comparison.json", {"columns": ["Dimension", "Brand"],
@@ -352,17 +397,17 @@ class PdfTests(ReportTestCase):
         data = self.render()
         for text in (b"PHARMER RESEARCH", b"We find the needle in the haystack.",
                      b"Sharpest Needle: Illustrative: inventory 333 built up.", b"[HIGH]",
-                     b"Market view: partly priced in.", b"Recommended CEO move",
+                     b"Market view: partly priced in.", b"24-Month Strategic Move for the CEO",
                      b"Downside if wrong:", SOURCE_P14.encode(), b"[1]",
                      b"Comparison table not built for this run."):
             self.assertIn(text, data)
-        self.assertNotIn(b"Warnings for this run", data)
+        self.assertNotIn(b"Coverage and limitations", data)
 
     def test_failure_states_reach_the_pdf(self):
         (self.run_dir / "ceo_move.json").unlink()
         self.write("run.json", {})
         data = self.render()
-        for text in (b"Warnings for this run", b"CEO move unavailable.",
+        for text in (b"Coverage and limitations", b"CEO move unavailable.",
                      b"not yet confirmed by the analyst"):
             self.assertIn(text, data)
 

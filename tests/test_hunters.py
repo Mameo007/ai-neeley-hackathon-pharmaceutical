@@ -8,6 +8,7 @@ import json
 import shutil
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 from types import SimpleNamespace as NS
 
@@ -135,7 +136,9 @@ class RunTests(HunterTestCase):
                 lead(), lead(is_label_finding=True)]})]),
             end_turn(),
         )
-        asyncio.run(hunters.run(self.run_dir))
+        # One scripted conversation, so one hunter (the swarm shares the fake client's queue).
+        with mock.patch.object(hunters, "HUNTERS", [channel_checker]):
+            asyncio.run(hunters.run(self.run_dir))
 
         first_lead, second_lead = json.loads((self.run_dir / "leads.json").read_text())
         self.assertEqual([first_lead["finding_id"], second_lead["finding_id"]], ["F-001", "F-002"])
@@ -229,3 +232,38 @@ class RunTests(HunterTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+    def test_label_lawyer_lead_cites_own_label(self):
+        from pharmer.hunters import label_lawyer
+        label = lead(chunk_id="NVO-LABEL-OZEMPIC-p4-c03", quote="1 mg 1 mg / 0.5 mL",
+                     is_label_finding=True, metric="max_dose_per_injection", entity="OZEMPIC",
+                     value=1, unit="mg", currency="none")
+        client = self.script(
+            fake_message("tool_use", [tool_use("t1", "submit_leads", {"leads": [label]})]),
+            end_turn())
+        [finding] = asyncio.run(harness.run_hunter(
+            "NVO-test", self.corpus, label_lawyer.NAME, label_lawyer.BRIEF))
+        self.assertTrue(finding["is_label_finding"])
+        self.assertEqual(finding["reasonings"][0]["hunter"], "label_lawyer")
+        # The overview tells own labels from rival labels by ticker.
+        overview = client.requests[0]["messages"][0]["content"]
+        self.assertIn("NVO-LABEL-OZEMPIC: NVO label", overview)
+        self.assertIn("LLY-LABEL-MOUNJARO: LLY label", overview)
+
+
+class HunterRegistryTests(unittest.TestCase):
+    """Every hunter module follows the Channel Checker pattern (offline; briefs not yet run
+    against the real API)."""
+
+    def test_each_hunter_has_matching_name_brief_and_registration(self):
+        from pharmer import hunters
+        names = [h.NAME for h in hunters.HUNTERS]
+        self.assertEqual(names, ["channel_checker", "redliner", "table_archaeologist",
+                                 "footnote_miner", "gross_to_net", "label_lawyer"])
+        for hunter in hunters.HUNTERS:
+            self.assertEqual(hunter.__name__, f"pharmer.hunters.{hunter.NAME}")
+            self.assertTrue(hunter.BRIEF.startswith("# "), hunter.NAME)
+            self.assertIn("fiscal_period", hunter.BRIEF)  # the Dedup anchor rule
+            self.assertNotIn("Novo", hunter.BRIEF)  # no company-specific priming
+        self.assertIn("`is_label_finding` to true", hunters.label_lawyer.BRIEF)

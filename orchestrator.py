@@ -2,8 +2,8 @@
 
     start  : corpus -> hunters -> Dedup -> Fact Checker -> Quant -> Priced-In -> scoring -> Peer
              -> scoring again, then stop so the analyst can review the selected findings.
-    finish : write the analyst's Sharpest Needle + product into run.json, then Comparison
-             Builder -> Synthesizer -> CEO Move -> Report.
+    finish : write the analyst's Sharpest Needle, product and rivals into run.json, then
+             Comparison Builder -> Synthesizer -> CEO Move -> Report.
 
 Each stage is `await pharmer.<module>.run(run_dir)`. A stage whose module is not on main yet is
 skipped visibly; a required stage that raises stops the phase, an optional one does not.
@@ -13,6 +13,7 @@ contract file), rewritten after every stage so a UI can poll it.
 Usage:
     .venv/bin/python orchestrator.py start NVO [--corpus data/sample/NVO]
     .venv/bin/python orchestrator.py finish runs/NVO-20261018-0230 [--needle F-003] [--product X]
+        [--rivals NAME[,NAME]]
 """
 import argparse
 import asyncio
@@ -26,18 +27,19 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-from pharmer import librarian
+from pharmer import comparison, librarian
 from pharmer import synthesizer as syn
 
 log = logging.getLogger("orchestrator")
 
 REPO_ROOT = Path(__file__).resolve().parent
-RUNS_DIR = REPO_ROOT / "runs"
+RUNS_DIR = Path(os.environ.get("PHARMER_RUNS_DIR", REPO_ROOT / "runs"))
 CORPUS_FILES = ["manifest.json", "chunks.jsonl", "facts.jsonl"]
 CORPUS_AUDIT = "librarian_report.json"  # the Librarian's sidecar; copied when present
 # Outputs of the finish phase, cleared before a re-run so a failed re-pick never leaves the
 # previous pick's report looking current.
-FINISH_OUTPUTS = ["comparison.json", "synthesis.json", "ceo_move.json", "report.pdf"]
+FINISH_OUTPUTS = ["comparison.json", "comparison_sources.json", "synthesis.json",
+                  "ceo_move.json", "report.pdf"]
 
 # (stage name, module under pharmer/, required). Scoring runs again after the Peer Agent,
 # which may demote findings (scoring is idempotent by design).
@@ -51,6 +53,16 @@ START_STAGES = [
     ("peer", "peer", False),
     ("scoring_after_peer", "scoring", True),
 ]
+# Stages whose agent is not built. They stay in START_STAGES so the run still accounts for
+# them, but they are never scheduled and no module import is attempted: the run records
+# them as "disabled" with the reason, which is neither "ok" (the work did not happen) nor
+# "skipped" (nothing went wrong). Deleting the entries instead would hide from pipeline.json
+# that the pipeline has these stages at all. Remove a name here to turn its stage back on.
+DISABLED_STAGES = {
+    "priced_in": "the Priced-In Detector is not built, so obscurity is not assessed",
+    "peer": "the Peer Agent is not built, so findings are not compared against rivals",
+}
+
 FINISH_STAGES = [
     ("comparison", "comparison", False),
     ("synthesizer", "synthesizer", True),
@@ -117,6 +129,13 @@ async def _run_stages(run_dir, status, stages):
         entry = {"status": "running", "started_at": _now(), "seconds": 0.0, "error": None}
         status["stages"][name] = entry
         start = time.monotonic()
+        if name in DISABLED_STAGES:
+            # Before the import, so a disabled stage is never loaded or executed.
+            entry.update(status="disabled", error=None, seconds=0.0,
+                         reason=DISABLED_STAGES[name])
+            log.info("%s: disabled (%s)", name, DISABLED_STAGES[name])
+            _save(run_dir, status)
+            continue
         try:
             if isinstance(runner, str):
                 module = load_module(runner)
@@ -170,11 +189,11 @@ def _corpus_tickers(corpus):
     return {d.get("ticker") for d in manifest if isinstance(d, dict) and d.get("ticker")}
 
 
-async def start_run(ticker, corpus=None, runs_dir=None) -> Path:
-    """Phase 1: new run folder, corpus, hunting, verification, scoring; stops at the human pause.
+def prepare_run(ticker, corpus=None, runs_dir=None) -> Path:
+    """Validate a start request and create its run folder + pipeline.json (phase "running").
 
-    corpus: a folder holding a prebuilt manifest.json/chunks.jsonl/facts.jsonl to copy instead of
-    running the live Librarian. Returns the run folder; its pipeline.json says how it went.
+    Raises UsageError before creating anything. Split from start_run so a UI learns the run
+    folder before the (long) stages begin.
     """
     ticker = ticker.upper()
     if ticker not in librarian.CIKS:
@@ -191,14 +210,28 @@ async def start_run(ticker, corpus=None, runs_dir=None) -> Path:
         run_dir.mkdir()
     except FileExistsError:
         raise UsageError(f"{run_dir} already exists; start again in a minute") from None
-    status = {"ticker": ticker, "phase": "running", "started_at": _now(), "stages": {}}
-    _save(run_dir, status)
+    _save(run_dir, {"ticker": ticker, "phase": "running", "started_at": _now(), "stages": {}})
+    return run_dir
 
+
+async def run_start_stages(run_dir, corpus=None) -> Path:
+    """Phase 1's stages on a prepared run folder; ends at "awaiting_human" or "failed"."""
+    run_dir = Path(run_dir)
+    status = read_status(run_dir)
     ok = await _run_stages(run_dir, status,
                            [("corpus", _corpus_stage(corpus), True)] + START_STAGES)
     status["phase"] = "awaiting_human" if ok else "failed"
     _save(run_dir, status)
     return run_dir
+
+
+async def start_run(ticker, corpus=None, runs_dir=None) -> Path:
+    """Phase 1: new run folder, corpus, hunting, verification, scoring; stops at the human pause.
+
+    corpus: a folder holding a prebuilt manifest.json/chunks.jsonl/facts.jsonl to copy instead of
+    running the live Librarian. Returns the run folder; its pipeline.json says how it went.
+    """
+    return await run_start_stages(prepare_run(ticker, corpus, runs_dir), corpus)
 
 
 def _scored_findings(run_dir):
@@ -209,19 +242,21 @@ def _scored_findings(run_dir):
     return findings
 
 
-async def finish_run(run_dir, needle=None, product=None) -> Path:
-    """Phase 2: record the analyst's choices in run.json, then verdict, move and report.
+def prepare_finish(run_dir, needle=None, product=None, rivals=None) -> Path:
+    """Validate a finish request, record the analyst's choices in run.json, clear the previous
+    finish outputs and mark the run "running". Raises UsageError before writing anything.
 
-    needle: a selected finding id, or None to let CEO Move fall back to the Recommended one
-    (the report labels it as not yet confirmed). Re-running with a new pick is allowed.
-    """
+    rivals: "A,B" or a list of names; None keeps run.json's, empty clears them."""
     run_dir = Path(run_dir)
-    phase = syn.read_json_or_none(run_dir / "pipeline.json")
-    phase = phase.get("phase") if isinstance(phase, dict) else None
-    # A hand-assembled run folder has no pipeline.json; one made by `start` must have paused.
-    if phase is not None and phase not in ("awaiting_human", "done"):
-        raise UsageError(f"{run_dir} is at phase {phase!r}; `finish` needs a run that stopped "
-                         "at the human pause (see pipeline.json)")
+    status = syn.read_json_or_none(run_dir / "pipeline.json")
+    # A hand-assembled run folder has no pipeline.json. One made by `start` must have reached
+    # the human pause, and not be running now; a failed earlier `finish` may be retried.
+    if isinstance(status, dict):
+        start_done = ((status.get("stages") or {}).get("scoring_after_peer") or {}).get(
+            "status") == "ok"
+        if status.get("phase") == "running" or not start_done:
+            raise UsageError(f"{run_dir} is at phase {status.get('phase')!r}; `finish` needs a "
+                             "run whose `start` reached the human pause (see pipeline.json)")
     findings = _scored_findings(run_dir)
     if findings is None:
         raise UsageError(f"{run_dir} has no scored findings.json; run `start` first")
@@ -233,20 +268,49 @@ async def finish_run(run_dir, needle=None, product=None) -> Path:
     run_info = run_info if isinstance(run_info, dict) else {}
     if needle is not None:
         run_info["sharpest_needle"] = needle
-    if product is not None:
+    if product == "":
+        run_info.pop("product", None)  # the analyst withdrew an earlier product choice
+    elif product is not None:
         run_info["product"] = product
+    if rivals is not None:
+        # The Comparison Builder's own normalizer, so run.json holds the list the stage uses.
+        names = comparison.clean_rivals(rivals, run_info.get("product"))
+        if names:
+            run_info["rivals"] = names
+        else:
+            run_info.pop("rivals", None)  # the analyst withdrew the rival list
     syn.write_json(run_dir / "run.json", run_info)
 
     for name in FINISH_OUTPUTS:
         (run_dir / name).unlink(missing_ok=True)
     status = read_status(run_dir)
     status["phase"] = "running"
+    status.pop("error", None)  # a crash recorded by a UI job belongs to the previous attempt
     for name, _, _ in FINISH_STAGES:
         status["stages"].pop(name, None)
+    _save(run_dir, status)
+    return run_dir
+
+
+async def run_finish_stages(run_dir) -> Path:
+    """Phase 2's stages on a run prepared by prepare_finish; ends at "done" or "failed"."""
+    run_dir = Path(run_dir)
+    status = read_status(run_dir)
     ok = await _run_stages(run_dir, status, FINISH_STAGES)
     status["phase"] = "done" if ok else "failed"
     _save(run_dir, status)
     return run_dir
+
+
+async def finish_run(run_dir, needle=None, product=None, rivals=None) -> Path:
+    """Phase 2: record the analyst's choices in run.json, then grid, verdict, move and report.
+
+    needle: a selected finding id, or None to let CEO Move fall back to the Recommended one
+    (the report labels it as not yet confirmed). product: a name, None to keep run.json's, or ""
+    to clear it. rivals: "A,B" or a list, None to keep run.json's, or empty to clear them.
+    Re-running with a new pick is allowed.
+    """
+    return await run_finish_stages(prepare_finish(run_dir, needle, product, rivals))
 
 
 def _stage_lines(status):
@@ -269,8 +333,8 @@ def _pause_summary(run_dir):
                         "says why:", command]
     recommended = next((f["finding_id"] for f, _ in selected if f.get("recommended")), "F-nnn")
     return lines + ["", "Name the Sharpest Needle (Recommended pre-filled; change it to "
-                        "pick another) and confirm the product, then run:",
-                    f"{command} --needle {recommended} --product NAME"]
+                        "pick another), confirm the product and name the rivals, then run:",
+                    f"{command} --needle {recommended} --product NAME --rivals NAME[,NAME]"]
 
 
 def main(argv):
@@ -283,6 +347,8 @@ def main(argv):
     p_finish.add_argument("run_dir")
     p_finish.add_argument("--needle", help="selected finding id named by the analyst")
     p_finish.add_argument("--product", help="product confirmed by the analyst")
+    p_finish.add_argument("--rivals", help='comma-separated rival products, NAME[,NAME] '
+                                           '("" clears them)')
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
 
@@ -291,7 +357,7 @@ def main(argv):
             run_dir = asyncio.run(start_run(args.ticker, corpus=args.corpus))
         else:
             run_dir = asyncio.run(finish_run(args.run_dir, needle=args.needle,
-                                             product=args.product))
+                                             product=args.product, rivals=args.rivals))
     except UsageError as exc:
         print(f"orchestrator: {exc}", file=sys.stderr)
         return 2

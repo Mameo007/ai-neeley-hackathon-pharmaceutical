@@ -94,9 +94,15 @@ class StartTests(OrchestratorTestCase):
         self.assertEqual(list(status["stages"]),
                          ["corpus", "hunters", "dedup", "fact_checker", "quant", "priced_in",
                           "scoring", "peer", "scoring_after_peer"])
-        for name in ("fact_checker", "quant", "priced_in", "peer"):
+        for name in ("fact_checker", "quant"):
             self.assertEqual((status["stages"][name]["status"], status["stages"][name]["error"]),
                              ("skipped", "not built"))
+        # The two unbuilt agents are disabled by configuration, not skipped by discovery:
+        # the entry records why, carries no error, and is never "ok".
+        for name in orchestrator.DISABLED_STAGES:
+            entry = status["stages"][name]
+            self.assertEqual((entry["status"], entry["error"]), ("disabled", None))
+            self.assertEqual(entry["reason"], orchestrator.DISABLED_STAGES[name])
         self.assertEqual(status["stages"]["dedup"]["status"], "ok")
         self.assertFalse((run_dir / "run.json").exists())
 
@@ -150,7 +156,9 @@ class StartTests(OrchestratorTestCase):
         self.assertEqual(code, 0)
         run_dir = next(self.runs.iterdir())
         self.assertIn("F-001  [Recommended]", out)
-        self.assertIn(f"orchestrator.py finish {run_dir} --needle F-001 --product NAME", out)
+        self.assertIn(f"orchestrator.py finish {run_dir} --needle F-001 --product NAME "
+                      "--rivals NAME[,NAME]", out)
+        self.assertIn("name the rivals", out)
         with self.assertRaises(SystemExit) as cm:
             orchestrator.main([])
         self.assertEqual(cm.exception.code, 2)
@@ -221,10 +229,46 @@ class FinishTests(OrchestratorTestCase):
         for entry in status["stages"].values():
             self.assertIn("seconds", entry)
 
+    def test_empty_product_clears_it(self):
+        self.finish(self.run_dir, needle="F-003", product="Brand B")
+        self.finish(self.run_dir, needle="F-003", product="")
+        self.assertEqual(self.run_json(), {"sharpest_needle": "F-003"})
+
     def test_rerun_keeps_other_keys(self):
         self.finish(self.run_dir, needle="F-003", product="Brand B")
         self.finish(self.run_dir, needle="F-001")
         self.assertEqual(self.run_json(), {"sharpest_needle": "F-001", "product": "Brand B"})
+
+    def test_rivals_stored_kept_and_cleared(self):
+        self.finish(self.run_dir, needle="F-003", product="Brand B",
+                    rivals=" Brand C, ,Brand D,Brand C")
+        self.assertEqual(self.run_json()["rivals"], ["Brand C", "Brand D"])
+        self.finish(self.run_dir, needle="F-003")  # None keeps the stored list
+        self.assertEqual(self.run_json()["rivals"], ["Brand C", "Brand D"])
+        self.finish(self.run_dir, needle="F-003", rivals=["Brand E"])
+        self.assertEqual(self.run_json()["rivals"], ["Brand E"])
+        self.finish(self.run_dir, needle="F-003", rivals="")
+        self.assertNotIn("rivals", self.run_json())
+        # Same normalizer as the stage: the product and case-insensitive repeats are dropped.
+        self.finish(self.run_dir, needle="F-003", rivals="brand b, Brand C,brand c")
+        self.assertEqual(self.run_json()["rivals"], ["Brand C"])
+
+    def test_cli_rivals_flag_reaches_run_json(self):
+        code, _ = self.main(["finish", str(self.run_dir), "--needle", "F-003", "--product",
+                             "Brand B", "--rivals", "Brand C,Brand D"])
+        self.assertEqual(code, 0)
+        self.assertEqual(self.run_json(), {"sharpest_needle": "F-003", "product": "Brand B",
+                                           "rivals": ["Brand C", "Brand D"]})
+
+    def test_rerun_clears_the_previous_comparison_sources(self):
+        self.not_built.discard("comparison")
+        self.finish(self.run_dir, needle="F-003")
+        (self.run_dir / "comparison_sources.json").write_text("{}", encoding="utf-8")
+        self.fail["comparison"] = ValueError("boom")
+        self.finish(self.run_dir, needle="F-003")
+        self.assertFalse((self.run_dir / "comparison_sources.json").exists())
+        self.assertEqual(self.status(self.run_dir)["stages"]["comparison"]["status"], "failed")
+        self.assertEqual(self.status(self.run_dir)["phase"], "done")  # optional stage
 
     def test_no_needle_leaves_the_fallback_to_ceo_move(self):
         self.finish(self.run_dir)
@@ -265,9 +309,25 @@ class FinishTests(OrchestratorTestCase):
     def test_refused_unless_start_paused(self):
         status = self.status(self.run_dir)
         status["phase"] = "failed"
+        status["stages"]["scoring_after_peer"]["status"] = "failed"
         (self.run_dir / "pipeline.json").write_text(json.dumps(status), encoding="utf-8")
         with self.assertRaises(orchestrator.UsageError):
             self.finish(self.run_dir, needle="F-003")
+
+    def test_refused_while_running(self):
+        status = self.status(self.run_dir)
+        status["phase"] = "running"
+        (self.run_dir / "pipeline.json").write_text(json.dumps(status), encoding="utf-8")
+        with self.assertRaises(orchestrator.UsageError):
+            self.finish(self.run_dir, needle="F-003")
+
+    def test_failed_finish_can_be_retried(self):
+        self.fail["report"] = OSError("disk full")
+        self.finish(self.run_dir, needle="F-003")
+        self.assertEqual(self.status(self.run_dir)["phase"], "failed")
+        del self.fail["report"]
+        self.finish(self.run_dir, needle="F-003")
+        self.assertEqual(self.status(self.run_dir)["phase"], "done")
 
     def test_rerun_clears_the_previous_report(self):
         self.finish(self.run_dir, needle="F-003")

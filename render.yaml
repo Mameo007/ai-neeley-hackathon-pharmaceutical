@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: pharmer-research
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: python -m streamlit run app.py --server.address 0.0.0.0 --server.port $PORT --server.headless true
+    healthCheckPath: /_stcore/health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.14.3
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: PHARMER_SEC_UA
+        sync: false
+      - key: PHARMER_PARTNER
+        value: A

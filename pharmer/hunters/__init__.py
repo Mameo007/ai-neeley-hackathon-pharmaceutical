@@ -8,12 +8,15 @@ import json
 import logging
 from pathlib import Path
 
-from pharmer.hunters import channel_checker
+from pharmer.hunters import (channel_checker, footnote_miner, gross_to_net, label_lawyer,
+                             redliner, table_archaeologist)
 from pharmer.hunters.harness import Corpus, load_corpus, run_hunter
 
 log = logging.getLogger(__name__)
 
-HUNTERS = [channel_checker]
+# Order sets the F-001, F-002, ... numbering of leads.json; Channel Checker stays first.
+HUNTERS = [channel_checker, redliner, table_archaeologist, footnote_miner, gross_to_net,
+           label_lawyer]
 
 
 async def _run_safely(run_id: str, corpus: Corpus, hunter) -> list[dict]:
